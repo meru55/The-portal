@@ -1,0 +1,16 @@
+新しいHTMLファイルを追加する場合
+① ファイルをフォルダに置く
+C:\Users\KK445-PC\Downloads\The-portal\ の中に新しいHTMLファイルを置く
+The-portal/
+├── index.html   ← 既存
+└── newtool.html ← 新しく追加
+
+② pushする
+bashcd C:\Users\KK445-PC\Downloads\The-portal
+git add newtool.html
+git commit -m "add newtool"
+git push
+
+③ index.htmlのカードにURLを設定する
+新しいツールのURLは https://meru55.github.io/The-portal/newtool.html になるので、カードの href にそのURLを設定して同じようにpushすればOKです。
+html<a class="card" href="https://meru55.github.io/The-portal/newtool.html" ...>
