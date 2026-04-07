@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>要件定義ツール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0d0f;
+  --surface: #141416;
+  --surface-hover: #1c1c1f;
+  --border: rgba(255,255,255,0.07);
+  --border-hover: rgba(255,255,255,0.18);
+  --text: #e8e8e4;
+  --text-muted: #666660;
+  --text-dim: #3a3a38;
+  --accent: #c8ff64;
+  --accent-dim: rgba(200,255,100,0.08);
+  --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Syne', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+.app { display: flex; height: 100vh; min-height: 600px; flex-direction: column; position: relative; z-index: 1; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+.toolbar-title { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--text-muted); flex: 1; min-width: 120px; letter-spacing: 0.1em; text-transform: uppercase; }
+.btn { font-size: 11px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap; font-family: 'DM Mono', monospace; transition: all 0.18s; }
+.btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-hover); }
+.btn.primary { background: var(--accent); color: #0d0d0f; border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { opacity: 0.85; }
+.main { display: flex; flex: 1; overflow: hidden; }
+.sidebar { width: 200px; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; flex-shrink: 0; }
+.sidebar-section { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.sidebar-label { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; color: var(--text-dim); padding: 4px 12px 2px; text-transform: uppercase; letter-spacing: 0.1em; }
+.sidebar-item { font-size: 12px; padding: 6px 12px; cursor: pointer; color: var(--text-muted); border-left: 2px solid transparent; transition: background 0.18s, color 0.18s; }
+.sidebar-item:hover { background: var(--surface-hover); color: var(--text); }
+.sidebar-item.active { color: var(--accent); background: var(--accent-dim); border-left-color: var(--accent); font-weight: 600; }
+.content { flex: 1; overflow-y: auto; padding: 28px; background: var(--bg); }
+.section-header { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 4px; letter-spacing: -0.01em; }
+.section-desc { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); margin-bottom: 24px; letter-spacing: 0.03em; }
+.field-group { margin-bottom: 20px; }
+.field-label { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; letter-spacing: 0.05em; }
+.required { color: #ff6464; font-size: 10px; }
+.field-input { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-family: inherit; resize: vertical; transition: border-color 0.18s; }
+.field-input:focus { outline: none; border-color: rgba(200,255,100,0.3); }
+.field-input::placeholder { color: var(--text-dim); }
+.table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: var(--surface); color: var(--text-muted); font-family: 'DM Mono', monospace; font-weight: 500; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+td { padding: 6px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface-hover); }
+td input, td select, td textarea { width: 100%; padding: 4px 6px; font-size: 12px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); font-family: inherit; }
+td input:focus, td select:focus, td textarea:focus { outline: none; border-color: var(--border); background: var(--surface); }
+td select { cursor: pointer; }
+td select option { background: var(--surface); color: var(--text); }
+.badge { display: inline-block; font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 500; letter-spacing: 0.04em; }
+.badge-high { background: rgba(255,100,100,0.12); color: #ff8080; border: 1px solid rgba(255,100,100,0.18); }
+.badge-mid { background: rgba(255,180,60,0.1); color: #ffb84d; border: 1px solid rgba(255,180,60,0.18); }
+.badge-low { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(200,255,100,0.18); }
+.badge-done { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(200,255,100,0.18); }
+.badge-wip { background: rgba(100,180,255,0.1); color: #64b4ff; border: 1px solid rgba(100,180,255,0.18); }
+.badge-todo { background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border); }
+.add-row-btn { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); padding: 4px 8px; cursor: pointer; border: none; background: none; display: flex; align-items: center; gap: 4px; transition: color 0.18s; letter-spacing: 0.04em; }
+.add-row-btn:hover { color: var(--accent); }
+.del-btn { font-size: 11px; color: var(--text-dim); background: none; border: none; cursor: pointer; padding: 2px 4px; transition: color 0.18s; }
+.del-btn:hover { color: #ff6464; }
+.progress-bar-wrap { height: 3px; background: var(--surface); border-radius: 2px; margin: 12px 0 20px; overflow: hidden; }
+.progress-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 20px; }
+.status-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.status-card-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+.status-card-val { font-size: 22px; font-weight: 700; color: var(--text); }
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent); color: #0d0d0f; font-family: 'DM Mono', monospace; font-size: 12px; padding: 8px 14px; border-radius: var(--radius); opacity: 0; transition: opacity 0.3s; z-index: 100; pointer-events: none; font-weight: 500; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="app">
+<div class="toolbar">
+  <span class="toolbar-title">要件定義ツール</span>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+  <button class="btn" onclick="document.getElementById('fileInput').click()">📂 読み込む</button>
+  <button class="btn" onclick="saveJSON()">💾 保存</button>
+  <button class="btn primary" onclick="exportMarkdown()">📄 MD出力</button>
+  <button class="btn primary" onclick="exportHTML()">🌐 HTML出力</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">概要</div>
+      <div class="sidebar-item active" onclick="showSection('overview')" id="nav-overview">プロジェクト概要</div>
+      <div class="sidebar-item" onclick="showSection('stakeholders')" id="nav-stakeholders">関係者</div>
+      <div class="sidebar-item" onclick="showSection('scope')" id="nav-scope">スコープ</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">要件</div>
+      <div class="sidebar-item" onclick="showSection('functional')" id="nav-functional">機能要件</div>
+      <div class="sidebar-item" onclick="showSection('nonfunctional')" id="nav-nonfunctional">非機能要件</div>
+      <div class="sidebar-item" onclick="showSection('constraints')" id="nav-constraints">制約・前提条件</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">計画</div>
+      <div class="sidebar-item" onclick="showSection('schedule')" id="nav-schedule">スケジュール</div>
+      <div class="sidebar-item" onclick="showSection('risks')" id="nav-risks">リスク管理</div>
+      <div class="sidebar-item" onclick="showSection('dashboard')" id="nav-dashboard">ダッシュボード</div>
+    </div>
+  </div>
+
+  <div class="content" id="contentArea"></div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const data = {
+  overview: { title: '', background: '', objective: '', summary: '', period: '', budget: '' },
+  stakeholders: [],
+  scope: { inScope: '', outScope: '' },
+  functional: [],
+  nonfunctional: [],
+  constraints: [],
+  schedule: [],
+  risks: []
+};
+
+const sections = ['overview','stakeholders','scope','functional','nonfunctional','constraints','schedule','risks','dashboard'];
+
+function showSection(name) {
+  sections.forEach(s => {
+    const el = document.getElementById('nav-' + s);
+    if (el) el.classList.remove('active');
+  });
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
+  const c = document.getElementById('contentArea');
+  c.innerHTML = '';
+  if (name === 'overview') renderOverview(c);
+  else if (name === 'stakeholders') renderStakeholders(c);
+  else if (name === 'scope') renderScope(c);
+  else if (name === 'functional') renderFunctional(c);
+  else if (name === 'nonfunctional') renderNonfunctional(c);
+  else if (name === 'constraints') renderConstraints(c);
+  else if (name === 'schedule') renderSchedule(c);
+  else if (name === 'risks') renderRisks(c);
+  else if (name === 'dashboard') renderDashboard(c);
+}
+
+function renderOverview(c) {
+  c.innerHTML = `
+    <div class="section-header">プロジェクト概要</div>
+    <div class="section-desc">プロジェクトの基本情報を入力してください</div>
+    <div class="field-group">
+      <div class="field-label">プロジェクト名 <span class="required">必須</span></div>
+      <input class="field-input" placeholder="例：受注管理システム刷新" value="${esc(data.overview.title)}" oninput="data.overview.title=this.value">
+    </div>
+    <div class="field-group">
+      <div class="field-label">背景・課題</div>
+      <textarea class="field-input" rows="3" placeholder="現状の課題や背景を記述" oninput="data.overview.background=this.value">${esc(data.overview.background)}</textarea>
+    </div>
+    <div class="field-group">
+      <div class="field-label">目的・ゴール</div>
+      <textarea class="field-input" rows="3" placeholder="このプロジェクトで達成したいこと" oninput="data.overview.objective=this.value">${esc(data.overview.objective)}</textarea>
+    </div>
+    <div class="field-group">
+      <div class="field-label">成果物概要</div>
+      <textarea class="field-input" rows="2" placeholder="最終的に何を作るか" oninput="data.overview.summary=this.value">${esc(data.overview.summary)}</textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field-group">
+        <div class="field-label">対象期間</div>
+        <input class="field-input" placeholder="例：2025年4月〜9月" value="${esc(data.overview.period)}" oninput="data.overview.period=this.value">
+      </div>
+      <div class="field-group">
+        <div class="field-label">予算感</div>
+        <input class="field-input" placeholder="例：〜500万円" value="${esc(data.overview.budget)}" oninput="data.overview.budget=this.value">
+      </div>
+    </div>`;
+}
+
+function renderStakeholders(c) {
+  if (!data.stakeholders.length) data.stakeholders.push({ name:'', role:'', dept:'', responsibility:'' });
+  c.innerHTML = `
+    <div class="section-header">関係者</div>
+    <div class="section-desc">プロジェクトに関わる人員・組織を整理します</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>氏名</th><th>役割</th><th>部署</th><th>責任範囲</th><th style="width:28px"></th></tr></thead>
+        <tbody id="stk-body"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addRow('stakeholders',{name:'',role:'',dept:'',responsibility:''});showSection('stakeholders')">＋ 行を追加</button>`;
+  renderTableBody('stk-body', data.stakeholders, [
+    {key:'name',placeholder:'山田 太郎'},
+    {key:'role',placeholder:'PL / PM / 開発者...'},
+    {key:'dept',placeholder:'情報システム部'},
+    {key:'responsibility',placeholder:'全体管理、設計レビュー...'}
+  ], 'stakeholders');
+}
+
+function renderScope(c) {
+  c.innerHTML = `
+    <div class="section-header">スコープ</div>
+    <div class="section-desc">対象範囲と対象外を明確にします</div>
+    <div class="field-group">
+      <div class="field-label">対象範囲（In Scope）</div>
+      <textarea class="field-input" rows="5" placeholder="・〇〇機能の開発&#10;・〇〇システムとの連携&#10;・〇〇業務フローの自動化" oninput="data.scope.inScope=this.value">${esc(data.scope.inScope)}</textarea>
+    </div>
+    <div class="field-group">
+      <div class="field-label">対象外（Out of Scope）</div>
+      <textarea class="field-input" rows="5" placeholder="・〇〇の改修は含まない&#10;・データ移行は別プロジェクトで対応&#10;・海外拠点は対象外" oninput="data.scope.outScope=this.value">${esc(data.scope.outScope)}</textarea>
+    </div>`;
+}
+
+function renderFunctional(c) {
+  if (!data.functional.length) data.functional.push({ id:'F-001', name:'', desc:'', priority:'高', status:'未着手', note:'' });
+  c.innerHTML = `
+    <div class="section-header">機能要件</div>
+    <div class="section-desc">システムが実現すべき機能を定義します</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:70px">ID</th><th>機能名</th><th>説明</th><th style="width:70px">優先度</th><th style="width:70px">状態</th><th>備考</th><th style="width:28px"></th></tr></thead>
+        <tbody id="func-body"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addFuncRow()">＋ 機能を追加</button>`;
+  renderFuncBody();
+}
+
+function renderFuncBody() {
+  const tbody = document.getElementById('func-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  data.functional.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input value="${esc(row.id)}" placeholder="F-001" oninput="data.functional[${i}].id=this.value"></td>
+      <td><input value="${esc(row.name)}" placeholder="ログイン機能" oninput="data.functional[${i}].name=this.value"></td>
+      <td><input value="${esc(row.desc)}" placeholder="メールアドレスとパスワードで認証" oninput="data.functional[${i}].desc=this.value"></td>
+      <td><select oninput="data.functional[${i}].priority=this.value">
+        <option ${row.priority==='高'?'selected':''}>高</option>
+        <option ${row.priority==='中'?'selected':''}>中</option>
+        <option ${row.priority==='低'?'selected':''}>低</option>
+      </select></td>
+      <td><select oninput="data.functional[${i}].status=this.value">
+        <option ${row.status==='未着手'?'selected':''}>未着手</option>
+        <option ${row.status==='進行中'?'selected':''}>進行中</option>
+        <option ${row.status==='完了'?'selected':''}>完了</option>
+      </select></td>
+      <td><input value="${esc(row.note)}" placeholder="" oninput="data.functional[${i}].note=this.value"></td>
+      <td><button class="del-btn" onclick="delRow('functional',${i});showSection('functional')">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function addFuncRow() {
+  const n = data.functional.length + 1;
+  const id = 'F-' + String(n).padStart(3, '0');
+  data.functional.push({ id, name:'', desc:'', priority:'高', status:'未着手', note:'' });
+  showSection('functional');
+}
+
+function renderNonfunctional(c) {
+  if (!data.nonfunctional.length) data.nonfunctional.push({ category:'性能', item:'', requirement:'', note:'' });
+  c.innerHTML = `
+    <div class="section-header">非機能要件</div>
+    <div class="section-desc">性能・可用性・セキュリティ等の品質要件を定義します</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:90px">カテゴリ</th><th>項目</th><th>要件</th><th>補足</th><th style="width:28px"></th></tr></thead>
+        <tbody id="nfr-body"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addRow('nonfunctional',{category:'性能',item:'',requirement:'',note:''});showSection('nonfunctional')">＋ 行を追加</button>`;
+  renderTableBody('nfr-body', data.nonfunctional, [
+    {key:'category', type:'select', options:['性能','可用性','セキュリティ','拡張性','運用保守','法規制','その他']},
+    {key:'item', placeholder:'レスポンスタイム'},
+    {key:'requirement', placeholder:'3秒以内（通常時）'},
+    {key:'note', placeholder:''}
+  ], 'nonfunctional');
+}
+
+function renderConstraints(c) {
+  if (!data.constraints.length) data.constraints.push({ type:'技術', content:'', reason:'' });
+  c.innerHTML = `
+    <div class="section-header">制約・前提条件</div>
+    <div class="section-desc">技術・組織・法規制等の制約を明記します</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:90px">種別</th><th>内容</th><th>理由・背景</th><th style="width:28px"></th></tr></thead>
+        <tbody id="con-body"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addRow('constraints',{type:'技術',content:'',reason:''});showSection('constraints')">＋ 行を追加</button>`;
+  renderTableBody('con-body', data.constraints, [
+    {key:'type', type:'select', options:['技術','組織','法規制','予算','その他']},
+    {key:'content', placeholder:'既存システムとの互換性を維持'},
+    {key:'reason', placeholder:'現行業務を止めないため'}
+  ], 'constraints');
+}
+
+function renderSchedule(c) {
+  if (!data.schedule.length) data.schedule.push({ milestone:'', date:'', deliverable:'', status:'未着手' });
+  c.innerHTML = `
+    <div class="section-header">スケジュール</div>
+    <div class="section-desc">主要マイルストーンと期日を管理します</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>マイルストーン</th><th style="width:110px">目標日</th><th>成果物</th><th style="width:70px">状態</th><th style="width:28px"></th></tr></thead>
+        <tbody id="sch-body"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addRow('schedule',{milestone:'',date:'',deliverable:'',status:'未着手'});showSection('schedule')">＋ 行を追加</button>`;
+  renderTableBody('sch-body', data.schedule, [
+    {key:'milestone', placeholder:'要件定義完了'},
+    {key:'date', type:'date'},
+    {key:'deliverable', placeholder:'要件定義書'},
+    {key:'status', type:'select', options:['未着手','進行中','完了','遅延']}
+  ], 'schedule');
+}
+
+function renderRisks(c) {
+  if (!data.risks.length) data.risks.push({ id:'R-001', content:'', impact:'高', probability:'低', mitigation:'' });
+  c.innerHTML = `
+    <div class="section-header">リスク管理</div>
+    <div class="section-desc">想定リスクと対策を整理します</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:65px">ID</th><th>リスク内容</th><th style="width:65px">影響度</th><th style="width:65px">発生確率</th><th>対策</th><th style="width:28px"></th></tr></thead>
+        <tbody id="risk-body"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" onclick="addRiskRow()">＋ リスクを追加</button>`;
+  renderTableBody('risk-body', data.risks, [
+    {key:'id', placeholder:'R-001'},
+    {key:'content', placeholder:'主要メンバーの離脱'},
+    {key:'impact', type:'select', options:['高','中','低']},
+    {key:'probability', type:'select', options:['高','中','低']},
+    {key:'mitigation', placeholder:'副担当者を事前にアサイン'}
+  ], 'risks');
+}
+
+function addRiskRow() {
+  const n = data.risks.length + 1;
+  data.risks.push({ id:'R-'+String(n).padStart(3,'0'), content:'', impact:'高', probability:'低', mitigation:'' });
+  showSection('risks');
+}
+
+function renderDashboard(c) {
+  const total = data.functional.length;
+  const done = data.functional.filter(r => r.status === '完了').length;
+  const wip = data.functional.filter(r => r.status === '進行中').length;
+  const hi = data.functional.filter(r => r.priority === '高').length;
+  const riskHi = data.risks.filter(r => r.impact === '高').length;
+  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+  c.innerHTML = `
+    <div class="section-header">ダッシュボード</div>
+    <div class="section-desc">プロジェクトの現状サマリー</div>
+    <div class="status-grid">
+      <div class="status-card"><div class="status-card-label">機能要件 総数</div><div class="status-card-val">${total}</div></div>
+      <div class="status-card"><div class="status-card-label">完了</div><div class="status-card-val" style="color:#c8ff64">${done}</div></div>
+      <div class="status-card"><div class="status-card-label">進行中</div><div class="status-card-val" style="color:#64b4ff">${wip}</div></div>
+      <div class="status-card"><div class="status-card-label">高優先度</div><div class="status-card-val" style="color:#ff8080">${hi}</div></div>
+      <div class="status-card"><div class="status-card-label">高リスク</div><div class="status-card-val" style="color:#ffb84d">${riskHi}</div></div>
+    </div>
+    <div class="field-label" style="margin-bottom:6px">機能実装進捗 ${progress}%</div>
+    <div class="progress-bar-wrap"><div class="progress-bar" style="width:${progress}%"></div></div>
+    <div style="font-size:12px;color:#666660;margin-bottom:16px">プロジェクト名：<strong>${esc(data.overview.title)||'（未入力）'}</strong>　期間：${esc(data.overview.period)||'未設定'}</div>
+    ${data.functional.length ? `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>機能名</th><th>優先度</th><th>状態</th></tr></thead>
+        <tbody>${data.functional.map(r => `<tr>
+          <td style="font-size:11px;color:#3a3a38">${esc(r.id)}</td>
+          <td>${esc(r.name)||'—'}</td>
+          <td><span class="badge badge-${r.priority==='高'?'high':r.priority==='中'?'mid':'low'}">${r.priority}</span></td>
+          <td><span class="badge badge-${r.status==='完了'?'done':r.status==='進行中'?'wip':'todo'}">${r.status}</span></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '<div style="font-size:13px;color:#3a3a38">機能要件が未登録です</div>'}`;
+}
+
+function renderTableBody(tbodyId, arr, cols, key) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  arr.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    let cells = '';
+    cols.forEach(col => {
+      if (col.type === 'select') {
+        cells += `<td><select oninput="data.${key}[${i}].${col.key}=this.value">${col.options.map(o => `<option ${row[col.key]===o?'selected':''}>${o}</option>`).join('')}</select></td>`;
+      } else if (col.type === 'date') {
+        cells += `<td><input type="date" value="${esc(row[col.key])}" oninput="data.${key}[${i}].${col.key}=this.value"></td>`;
+      } else {
+        cells += `<td><input value="${esc(row[col.key])}" placeholder="${col.placeholder||''}" oninput="data.${key}[${i}].${col.key}=this.value"></td>`;
+      }
+    });
+    cells += `<td><button class="del-btn" onclick="delRow('${key}',${i});showSection('${getCurrentSection()}')">✕</button></td>`;
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
+  });
+}
+
+function getCurrentSection() {
+  for (const s of sections) {
+    const el = document.getElementById('nav-' + s);
+    if (el && el.classList.contains('active')) return s;
+  }
+  return 'overview';
+}
+
+function addRow(key, template) { data[key].push({...template}); }
+function delRow(key, i) { data[key].splice(i, 1); }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function saveJSON() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (data.overview.title || '要件定義書') + '.json';
+  a.click();
+  showToast('JSONファイルを保存しました');
+}
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const loaded = JSON.parse(ev.target.result);
+      Object.assign(data, loaded);
+      showSection(getCurrentSection());
+      showToast('ファイルを読み込みました');
+    } catch { showToast('読み込みエラー：JSONが不正です'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function exportMarkdown() {
+  const f = data.functional;
+  const r = data.risks;
+  const s = data.schedule;
+  let md = `# ${data.overview.title || '要件定義書'}\n\n`;
+  md += `## プロジェクト概要\n`;
+  if (data.overview.background) md += `**背景・課題**\n${data.overview.background}\n\n`;
+  if (data.overview.objective) md += `**目的・ゴール**\n${data.overview.objective}\n\n`;
+  if (data.overview.period) md += `- 対象期間：${data.overview.period}\n`;
+  if (data.overview.budget) md += `- 予算：${data.overview.budget}\n`;
+  md += '\n';
+  if (data.stakeholders.length) {
+    md += `## 関係者\n| 氏名 | 役割 | 部署 | 責任範囲 |\n|---|---|---|---|\n`;
+    data.stakeholders.forEach(r2 => md += `| ${r2.name} | ${r2.role} | ${r2.dept} | ${r2.responsibility} |\n`);
+    md += '\n';
+  }
+  if (data.scope.inScope || data.scope.outScope) {
+    md += `## スコープ\n**対象範囲**\n${data.scope.inScope||''}\n\n**対象外**\n${data.scope.outScope||''}\n\n`;
+  }
+  if (f.length) {
+    md += `## 機能要件\n| ID | 機能名 | 説明 | 優先度 | 状態 | 備考 |\n|---|---|---|---|---|---|\n`;
+    f.forEach(r2 => md += `| ${r2.id} | ${r2.name} | ${r2.desc} | ${r2.priority} | ${r2.status} | ${r2.note} |\n`);
+    md += '\n';
+  }
+  if (data.nonfunctional.length) {
+    md += `## 非機能要件\n| カテゴリ | 項目 | 要件 | 補足 |\n|---|---|---|---|\n`;
+    data.nonfunctional.forEach(r2 => md += `| ${r2.category} | ${r2.item} | ${r2.requirement} | ${r2.note} |\n`);
+    md += '\n';
+  }
+  if (s.length) {
+    md += `## スケジュール\n| マイルストーン | 目標日 | 成果物 | 状態 |\n|---|---|---|---|\n`;
+    s.forEach(r2 => md += `| ${r2.milestone} | ${r2.date} | ${r2.deliverable} | ${r2.status} |\n`);
+    md += '\n';
+  }
+  if (r.length) {
+    md += `## リスク管理\n| ID | リスク内容 | 影響度 | 発生確率 | 対策 |\n|---|---|---|---|---|\n`;
+    r.forEach(r2 => md += `| ${r2.id} | ${r2.content} | ${r2.impact} | ${r2.probability} | ${r2.mitigation} |\n`);
+  }
+  const blob = new Blob([md], {type:'text/markdown'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (data.overview.title || '要件定義書') + '.md';
+  a.click();
+  showToast('Markdownファイルを出力しました');
+}
+
+function exportHTML() {
+  const f = data.functional;
+  const r = data.risks;
+  const s = data.schedule;
+  const title = data.overview.title || '要件定義書';
+  const done = f.filter(x => x.status === '完了').length;
+  const pct = f.length ? Math.round(done/f.length*100) : 0;
+  const tableStyle = 'width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px';
+  const thStyle = 'background:#f5f5f3;padding:8px 10px;text-align:left;border-bottom:1px solid #e0e0da;font-weight:500';
+  const tdStyle = 'padding:7px 10px;border-bottom:1px solid #f0f0ea';
+  let html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${title}</title>
+  <style>body{font-family:'Helvetica Neue','Hiragino Sans','Yu Gothic',Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 24px;color:#222;line-height:1.6}
+  h1{font-size:24px;font-weight:500;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:4px}
+  h2{font-size:16px;font-weight:500;margin:32px 0 12px;border-left:3px solid #222;padding-left:10px}
+  .meta{font-size:12px;color:#666;margin-bottom:32px}.progress-wrap{height:6px;background:#eee;border-radius:3px;margin:8px 0 24px;overflow:hidden}
+  .progress-fill{height:100%;background:#222;border-radius:3px}</style></head>
+  <body><h1>${title}</h1><div class="meta">
+  ${data.overview.period?`対象期間：${data.overview.period}　`:''}${data.overview.budget?`予算：${data.overview.budget}`:''}
+  </div>`;
+  if (data.overview.background) html += `<h2>背景・課題</h2><p style="font-size:13px;white-space:pre-wrap">${data.overview.background}</p>`;
+  if (data.overview.objective) html += `<h2>目的・ゴール</h2><p style="font-size:13px;white-space:pre-wrap">${data.overview.objective}</p>`;
+  if (data.stakeholders.length) {
+    html += `<h2>関係者</h2><table style="${tableStyle}"><thead><tr>${['氏名','役割','部署','責任範囲'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead><tbody>`;
+    data.stakeholders.forEach(r2 => html += `<tr>${[r2.name,r2.role,r2.dept,r2.responsibility].map(v=>`<td style="${tdStyle}">${v}</td>`).join('')}</tr>`);
+    html += '</tbody></table>';
+  }
+  if (data.scope.inScope||data.scope.outScope) {
+    html += `<h2>スコープ</h2><p style="font-size:13px"><strong>対象範囲</strong></p><p style="font-size:13px;white-space:pre-wrap">${data.scope.inScope}</p><p style="font-size:13px"><strong>対象外</strong></p><p style="font-size:13px;white-space:pre-wrap">${data.scope.outScope}</p>`;
+  }
+  if (f.length) {
+    html += `<h2>機能要件（実装進捗 ${pct}%）</h2><div class="progress-wrap"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+    html += `<table style="${tableStyle}"><thead><tr>${['ID','機能名','説明','優先度','状態','備考'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead><tbody>`;
+    f.forEach(r2 => html += `<tr>${[r2.id,r2.name,r2.desc,r2.priority,r2.status,r2.note].map(v=>`<td style="${tdStyle}">${v}</td>`).join('')}</tr>`);
+    html += '</tbody></table>';
+  }
+  if (s.length) {
+    html += `<h2>スケジュール</h2><table style="${tableStyle}"><thead><tr>${['マイルストーン','目標日','成果物','状態'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead><tbody>`;
+    s.forEach(r2 => html += `<tr>${[r2.milestone,r2.date,r2.deliverable,r2.status].map(v=>`<td style="${tdStyle}">${v}</td>`).join('')}</tr>`);
+    html += '</tbody></table>';
+  }
+  if (r.length) {
+    html += `<h2>リスク管理</h2><table style="${tableStyle}"><thead><tr>${['ID','リスク内容','影響度','発生確率','対策'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead><tbody>`;
+    r.forEach(r2 => html += `<tr>${[r2.id,r2.content,r2.impact,r2.probability,r2.mitigation].map(v=>`<td style="${tdStyle}">${v}</td>`).join('')}</tr>`);
+    html += '</tbody></table>';
+  }
+  html += '</body></html>';
+  const blob = new Blob([html], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = title + '.html';
+  a.click();
+  showToast('HTMLファイルを出力しました');
+}
+
+showSection('overview');
+</script>
+</body>
+</html>
