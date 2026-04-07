@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF ツールキット</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0c0c0f;
+    --surface: #141418;
+    --surface2: #1c1c22;
+    --border: #2a2a35;
+    --accent: #e8ff47;
+    --accent2: #47ffe8;
+    --text: #f0f0f5;
+    --muted: #6b6b80;
+    --danger: #ff4757;
+    --success: #4ade80;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 80% 10%, rgba(232,255,71,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 600px at 10% 80%, rgba(71,255,232,0.03) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .container { max-width: 860px; margin: 0 auto; position: relative; z-index: 1; }
+
+  /* Header */
+  header { margin-bottom: 40px; animation: fadeUp 0.6s ease both; }
+  .logo {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 2.2rem; letter-spacing: -0.02em; line-height: 1; margin-bottom: 8px;
+  }
+  .logo span { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; }
+
+  /* Drop Zone */
+  .drop-zone {
+    border: 1.5px dashed var(--border); border-radius: var(--radius);
+    padding: 60px 40px; text-align: center; cursor: pointer;
+    transition: all 0.3s ease; background: var(--surface);
+    position: relative; overflow: hidden; animation: fadeUp 0.6s 0.1s ease both;
+  }
+  .drop-zone::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(232,255,71,0.03) 0%, transparent 50%);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: var(--surface2); }
+  .drop-zone:hover::before, .drop-zone.dragover::before { opacity: 1; }
+  .drop-icon { font-size: 2.8rem; margin-bottom: 14px; display: block; opacity: 0.6; }
+  .drop-title { font-family: 'Syne', sans-serif; font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+  .drop-hint { color: var(--muted); font-size: 0.75rem; }
+  .drop-hint strong { color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  #fileInput { display: none; }
+
+  /* File Info Bar */
+  .file-info {
+    display: none; background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    animation: fadeUp 0.4s ease both;
+  }
+  .file-info.visible { display: flex; align-items: center; gap: 14px; }
+  .file-icon {
+    width: 40px; height: 40px; background: rgba(232,255,71,0.1);
+    border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+  }
+  .file-meta { flex: 1; min-width: 0; }
+  .file-name {
+    font-family: 'Syne', sans-serif; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px;
+  }
+  .file-pages { color: var(--muted); font-size: 0.72rem; }
+  .file-pages strong { color: var(--accent2); }
+  .btn-clear {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; padding: 6px 12px; border-radius: 6px;
+    font-family: inherit; font-size: 0.72rem; transition: all 0.2s;
+  }
+  .btn-clear:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Tab Switcher */
+  .tabs {
+    display: none; margin-top: 28px; margin-bottom: 0;
+    animation: fadeUp 0.4s ease both;
+  }
+  .tabs.visible { display: flex; gap: 4px; }
+  .tab-btn {
+    flex: 1; padding: 12px; border-radius: 8px; border: 1.5px solid var(--border);
+    background: var(--surface); color: var(--muted); font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 0.82rem; letter-spacing: 0.06em;
+    cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+  }
+  .tab-btn:hover { border-color: #3a3a4a; color: var(--text); }
+  .tab-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,255,71,0.06); }
+
+  /* Sections */
+  .section { display: none; animation: fadeUp 0.4s ease both; }
+  .section.visible { display: block; }
+
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; margin-top: 28px;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.82rem;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+
+  /* Preview */
+  .preview-controls {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .preview-nav, .preview-zoom {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px;
+  }
+  .btn-nav {
+    background: none; border: none; color: var(--text); cursor: pointer;
+    width: 26px; height: 26px; border-radius: 4px; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+  }
+  .btn-nav:hover:not(:disabled) { background: var(--border); }
+  .btn-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+  .page-indicator { font-size: 0.75rem; color: var(--muted); min-width: 76px; text-align: center; }
+  .page-indicator strong { color: var(--text); }
+  .zoom-label { font-size: 0.7rem; color: var(--muted); min-width: 36px; text-align: center; }
+
+  .preview-canvas-wrap {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius); overflow: auto; max-height: 500px; position: relative;
+  }
+  .preview-canvas-inner {
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 20px; min-width: min-content;
+  }
+  .preview-canvas-wrap canvas {
+    border-radius: 4px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); display: block; flex-shrink: 0;
+  }
+  .preview-loading {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: var(--surface); border-radius: var(--radius);
+    color: var(--muted); font-size: 0.78rem; gap: 8px;
+  }
+  .spin {
+    width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .thumb-strip {
+    display: flex; gap: 8px; margin-top: 12px;
+    overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin;
+  }
+  .thumb-strip::-webkit-scrollbar { height: 4px; }
+  .thumb-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .thumb-item {
+    flex-shrink: 0; cursor: pointer; border: 2px solid transparent;
+    border-radius: 6px; overflow: hidden; transition: border-color 0.2s; position: relative;
+  }
+  .thumb-item:hover { border-color: var(--muted); }
+  .thumb-item.active { border-color: var(--accent); }
+  .thumb-item canvas { display: block; width: 60px; height: auto; }
+  .thumb-num {
+    position: absolute; bottom: 2px; right: 3px; font-size: 0.58rem;
+    color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.55);
+    padding: 1px 4px; border-radius: 3px;
+  }
+
+  /* ─── Copy Tab ─── */
+  .copy-info {
+    margin-top: 20px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 11px 16px; font-size: 0.72rem; color: var(--muted);
+    line-height: 1.7;
+  }
+  .copy-info strong { color: var(--text); }
+
+  .page-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px; margin-top: 20px;
+  }
+
+  .page-card {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .page-card:hover { border-color: #3a3a4a; transform: translateY(-2px); }
+  .page-card.copied-ok { border-color: var(--success); }
+
+  .card-canvas-wrap {
+    background: #fff; overflow: hidden; display: flex;
+    justify-content: center; max-height: 220px;
+  }
+  .card-canvas-wrap canvas { display: block; width: 100% !important; height: auto !important; }
+
+  .card-footer {
+    padding: 9px 12px; display: flex; align-items: center;
+    justify-content: space-between; border-top: 1px solid var(--border); gap: 6px;
+  }
+  .card-page-label { font-size: 0.68rem; color: var(--muted); }
+
+  .btn-copy-img {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-radius: 6px; font-size: 0.68rem;
+    font-family: 'DM Mono', monospace; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-copy-img:hover { border-color: var(--accent); color: var(--accent); background: rgba(232,255,71,0.08); }
+  .btn-copy-img.success { border-color: var(--success); color: var(--success); background: rgba(74,222,128,0.1); }
+  .btn-copy-img svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+  /* ─── Split Tab ─── */
+  .range-hint {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 11px 16px; font-size: 0.73rem;
+    color: var(--muted); margin-bottom: 16px; line-height: 1.8;
+  }
+  .range-hint code {
+    background: rgba(232,255,71,0.1); color: var(--accent);
+    padding: 1px 5px; border-radius: 3px;
+  }
+
+  .btn-add {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 7px 14px; border-radius: 6px;
+    font-family: 'Syne', sans-serif; font-weight: 700;
+    font-size: 0.78rem; cursor: pointer; transition: all 0.2s; letter-spacing: 0.04em;
+  }
+  .btn-add:hover { background: #f0ff70; transform: translateY(-1px); }
+
+  .segments { display: flex; flex-direction: column; gap: 10px; }
+  .segment {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px;
+    display: grid; grid-template-columns: auto 1fr 1fr auto;
+    gap: 12px; align-items: center; transition: border-color 0.2s;
+    animation: fadeUp 0.3s ease both;
+  }
+  .segment:hover { border-color: #3a3a4a; }
+  .seg-num {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 1rem; color: var(--accent); min-width: 26px;
+  }
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  .field-label { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .field-input {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 0.82rem;
+    padding: 7px 10px; width: 100%; transition: all 0.2s; outline: none;
+  }
+  .field-input:focus { border-color: var(--accent); background: #1e1e26; }
+  .field-input.error { border-color: var(--danger); }
+  .field-input::placeholder { color: var(--muted); }
+  .btn-remove {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    cursor: pointer; width: 30px; height: 30px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0;
+  }
+  .btn-remove:hover { border-color: var(--danger); color: var(--danger); }
+
+  .error-msg {
+    display: none; color: var(--danger); font-size: 0.72rem; margin-top: 8px;
+    padding: 9px 14px; background: rgba(255,71,87,0.08);
+    border-radius: 6px; border-left: 3px solid var(--danger);
+  }
+  .error-msg.visible { display: block; }
+
+  .action-bar {
+    display: none; margin-top: 28px; animation: fadeUp 0.4s ease both;
+  }
+  .action-bar.visible { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  .btn-split {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 13px 28px; border-radius: 8px;
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 0.9rem; cursor: pointer; transition: all 0.25s;
+    letter-spacing: 0.05em; position: relative; overflow: hidden;
+  }
+  .btn-split::after {
+    content: ''; position: absolute; inset: 0;
+    background: rgba(255,255,255,0.15); opacity: 0; transition: opacity 0.2s;
+  }
+  .btn-split:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(232,255,71,0.2); }
+  .btn-split:hover::after { opacity: 1; }
+  .btn-split:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+  .processing-hint { color: var(--muted); font-size: 0.72rem; }
+
+  .progress-bar {
+    display: none; height: 2px; background: var(--border);
+    border-radius: 2px; margin-top: 14px; overflow: hidden;
+  }
+  .progress-bar.visible { display: block; }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px; width: 0%; transition: width 0.3s ease;
+  }
+
+  .results { display: none; margin-top: 28px; animation: fadeUp 0.4s ease both; }
+  .results.visible { display: block; }
+  .result-list { display: flex; flex-direction: column; gap: 8px; }
+  .result-item {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius); padding: 12px 18px;
+    display: flex; align-items: center; gap: 12px;
+    animation: fadeUp 0.3s ease both; transition: border-color 0.2s;
+  }
+  .result-item:hover { border-color: var(--accent2); }
+  .result-label { flex: 1; min-width: 0; }
+  .result-name {
+    font-family: 'Syne', sans-serif; font-weight: 600; margin-bottom: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .result-pages { font-size: 0.68rem; color: var(--muted); }
+  .btn-download {
+    background: rgba(71,255,232,0.1); color: var(--accent2);
+    border: 1px solid rgba(71,255,232,0.2); padding: 7px 14px;
+    border-radius: 6px; font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 0.72rem; cursor: pointer;
+    transition: all 0.2s; white-space: nowrap; flex-shrink: 0;
+  }
+  .btn-download:hover { background: rgba(71,255,232,0.2); transform: translateY(-1px); }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 28px; right: 28px;
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: var(--radius);
+    font-size: 0.75rem; display: flex; align-items: center; gap: 8px;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 300;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 600px) {
+    .segment { grid-template-columns: auto 1fr auto; }
+    .segment .field-group:nth-child(3) { grid-column: 2; }
+    .page-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toast"><span class="dot"></span><span id="toast-msg"></span></div>
+
+<div class="container">
+  <header>
+    <div class="logo">PDF<span>ツールキット</span></div>
+    <div class="subtitle">ブラウザだけで動く ／ サーバー不要</div>
+  </header>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">⬡</span>
+    <div class="drop-title">PDFをここにドロップ</div>
+    <div class="drop-hint">または<strong id="browseBtn">ファイルを選択</strong></div>
+    <input type="file" id="fileInput" accept=".pdf">
+  </div>
+
+  <!-- File Info -->
+  <div class="file-info" id="fileInfo">
+    <div class="file-icon">📄</div>
+    <div class="file-meta">
+      <div class="file-name" id="fileName">—</div>
+      <div class="file-pages">合計 <strong id="pageCount">0</strong> ページ</div>
+    </div>
+    <button class="btn-clear" id="clearBtn">✕ クリア</button>
+  </div>
+
+  <!-- Tab Switcher -->
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" id="tabCopy" onclick="switchTab('copy')">📋 画像コピー</button>
+    <button class="tab-btn" id="tabSplit" onclick="switchTab('split')">✂ 分割ダウンロード</button>
+  </div>
+
+  <!-- ══ COPY TAB ══ -->
+  <div class="section" id="copySection">
+    <!-- Preview -->
+    <div class="section-header" style="margin-top:24px">
+      <div class="section-title">プレビュー</div>
+    </div>
+    <div class="preview-controls">
+      <div class="preview-nav">
+        <button class="btn-nav" id="prevPage">‹</button>
+        <div class="page-indicator"><strong id="currentPage">1</strong> / <span id="totalPageDisp">1</span></div>
+        <button class="btn-nav" id="nextPage">›</button>
+      </div>
+      <div class="preview-zoom">
+        <button class="btn-nav" id="zoomOut">−</button>
+        <div class="zoom-label" id="zoomLabel">100%</div>
+        <button class="btn-nav" id="zoomIn">＋</button>
+      </div>
+    </div>
+    <div class="preview-canvas-wrap">
+      <div class="preview-loading" id="previewLoading"><div class="spin"></div> 読み込み中…</div>
+      <div class="preview-canvas-inner"><canvas id="previewCanvas"></canvas></div>
+    </div>
+    <div class="thumb-strip" id="thumbStrip"></div>
+
+    <div class="copy-info">
+      <strong>使い方：</strong>下のカードから各ページを <strong style="color:var(--accent)">PNG画像</strong> としてクリップボードにコピーできます。<br>
+      Word・PowerPoint・Slackなどに直接貼り付け可能です。
+    </div>
+
+    <!-- Page Cards Grid -->
+    <div class="page-grid" id="pageGrid"></div>
+  </div>
+
+  <!-- ══ SPLIT TAB ══ -->
+  <div class="section" id="splitSection">
+    <div class="section-header">
+      <div class="section-title">分割設定</div>
+      <button class="btn-add" id="addSegment">＋ セグメント追加</button>
+    </div>
+
+    <div class="range-hint">
+      <strong style="color: var(--text)">ページ指定の例：</strong><br>
+      単一ページ <code>3</code> ／ 範囲 <code>1-5</code> ／ 複数範囲 <code>1-3, 7, 9-12</code>
+    </div>
+
+    <div class="segments" id="segmentList"></div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="action-bar visible" id="actionBar">
+      <button class="btn-split" id="splitBtn">分割 &amp; 生成</button>
+      <div class="processing-hint" id="processingHint"></div>
+    </div>
+
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="results" id="results">
+      <div class="section-header">
+        <div class="section-title">ダウンロード</div>
+      </div>
+      <div class="result-list" id="resultList"></div>
+    </div>
+  </div>
+</div><!-- /container -->
+
+<script>
+  const { PDFDocument } = PDFLib;
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ── State ──────────────────────────────────────
+  let pdfDoc = null;        // pdf-lib doc
+  let pdfJsDoc = null;      // pdf.js doc
+  let totalPages = 0;
+  let pdfBytes = null;
+  let currentPageNum = 1;
+  let zoomLevel = 1.0;
+  let renderTask = null;
+  let segCounter = 0;
+  let generatedFiles = [];
+  let pageCanvases = {};    // pageNum -> canvas (for image copy)
+  let activeTab = 'copy';
+
+  // ── DOM refs ───────────────────────────────────
+  const dropZone      = document.getElementById('dropZone');
+  const fileInput     = document.getElementById('fileInput');
+  const browseBtn     = document.getElementById('browseBtn');
+  const fileInfo      = document.getElementById('fileInfo');
+  const fileNameEl    = document.getElementById('fileName');
+  const pageCountEl   = document.getElementById('pageCount');
+  const clearBtn      = document.getElementById('clearBtn');
+  const tabs          = document.getElementById('tabs');
+  const copySection   = document.getElementById('copySection');
+  const splitSection  = document.getElementById('splitSection');
+  const previewCanvas = document.getElementById('previewCanvas');
+  const previewLoading= document.getElementById('previewLoading');
+  const currentPageEl = document.getElementById('currentPage');
+  const totalPageDisp = document.getElementById('totalPageDisp');
+  const zoomLabel     = document.getElementById('zoomLabel');
+  const thumbStrip    = document.getElementById('thumbStrip');
+  const pageGrid      = document.getElementById('pageGrid');
+  const segmentList   = document.getElementById('segmentList');
+  const addSegmentBtn = document.getElementById('addSegment');
+  const errorMsg      = document.getElementById('errorMsg');
+  const splitBtn      = document.getElementById('splitBtn');
+  const processingHint= document.getElementById('processingHint');
+  const progressBar   = document.getElementById('progressBar');
+  const progressFill  = document.getElementById('progressFill');
+  const results       = document.getElementById('results');
+  const resultList    = document.getElementById('resultList');
+
+  // ── Tab switch ─────────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tabCopy').classList.toggle('active', tab === 'copy');
+    document.getElementById('tabSplit').classList.toggle('active', tab === 'split');
+    copySection.classList.toggle('visible', tab === 'copy');
+    splitSection.classList.toggle('visible', tab === 'split');
+  }
+
+  // ── File I/O ───────────────────────────────────
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') loadPDF(f);
+    else showToast('PDFファイルを選択してください');
+  });
+  browseBtn.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('click', e => { if (e.target !== browseBtn) fileInput.click(); });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadPDF(fileInput.files[0]); });
+  clearBtn.addEventListener('click', resetAll);
+
+  async function loadPDF(file) {
+    try {
+      pdfBytes = await file.arrayBuffer();
+      pdfDoc = await PDFDocument.load(pdfBytes);
+      totalPages = pdfDoc.getPageCount();
+      pdfJsDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice(0) }).promise;
+
+      fileNameEl.textContent = file.name;
+      pageCountEl.textContent = totalPages;
+      totalPageDisp.textContent = totalPages;
+      dropZone.style.display = 'none';
+      fileInfo.classList.add('visible');
+      tabs.classList.add('visible');
+
+      // Reset state
+      pageCanvases = {}; segCounter = 0; generatedFiles = [];
+      pageGrid.innerHTML = '';
+      segmentList.innerHTML = '';
+      resultList.innerHTML = '';
+      results.classList.remove('visible');
+      errorMsg.classList.remove('visible');
+      progressFill.style.width = '0%';
+      progressBar.classList.remove('visible');
+      currentPageNum = 1; zoomLevel = 1.0; zoomLabel.textContent = '100%';
+
+      // Show copy tab by default
+      copySection.classList.add('visible');
+      splitSection.classList.remove('visible');
+      document.getElementById('tabCopy').classList.add('active');
+      document.getElementById('tabSplit').classList.remove('active');
+      activeTab = 'copy';
+
+      addSegmentRow();
+      await renderPreview(1);
+      buildThumbs();
+      buildPageGrid();
+    } catch(e) {
+      showToast('PDFの読み込みに失敗しました');
+      console.error(e);
+    }
+  }
+
+  // ── Main Preview ───────────────────────────────
+  async function renderPreview(num) {
+    if (!pdfJsDoc) return;
+    previewLoading.style.display = 'flex';
+    currentPageNum = num;
+    currentPageEl.textContent = num;
+    updateNavBtns();
+    if (renderTask) { try { renderTask.cancel(); } catch(e) {} }
+    const page = await pdfJsDoc.getPage(num);
+    const viewport = page.getViewport({ scale: zoomLevel * 1.5 });
+    previewCanvas.width = viewport.width;
+    previewCanvas.height = viewport.height;
+    renderTask = page.render({ canvasContext: previewCanvas.getContext('2d'), viewport });
+    try { await renderTask.promise; } catch(e) {}
+    previewLoading.style.display = 'none';
+    thumbStrip.querySelectorAll('.thumb-item').forEach((t, i) => {
+      t.classList.toggle('active', i + 1 === num);
+    });
+    const active = thumbStrip.querySelector('.thumb-item.active');
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }
+
+  function updateNavBtns() {
+    document.getElementById('prevPage').disabled = currentPageNum <= 1;
+    document.getElementById('nextPage').disabled = currentPageNum >= totalPages;
+  }
+
+  document.getElementById('prevPage').addEventListener('click', () => { if (currentPageNum > 1) renderPreview(currentPageNum - 1); });
+  document.getElementById('nextPage').addEventListener('click', () => { if (currentPageNum < totalPages) renderPreview(currentPageNum + 1); });
+  document.getElementById('zoomIn').addEventListener('click', () => {
+    if (zoomLevel < 3) { zoomLevel = Math.min(3, zoomLevel + 0.25); zoomLabel.textContent = Math.round(zoomLevel*100)+'%'; renderPreview(currentPageNum); }
+  });
+  document.getElementById('zoomOut').addEventListener('click', () => {
+    if (zoomLevel > 0.25) { zoomLevel = Math.max(0.25, zoomLevel - 0.25); zoomLabel.textContent = Math.round(zoomLevel*100)+'%'; renderPreview(currentPageNum); }
+  });
+  document.addEventListener('keydown', e => {
+    if (!pdfJsDoc) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); if (currentPageNum < totalPages) renderPreview(currentPageNum + 1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); if (currentPageNum > 1) renderPreview(currentPageNum - 1); }
+  });
+
+  // ── Thumbnails ─────────────────────────────────
+  async function buildThumbs() {
+    thumbStrip.innerHTML = '';
+    const limit = Math.min(totalPages, 50);
+    for (let i = 1; i <= limit; i++) {
+      const item = document.createElement('div');
+      item.className = 'thumb-item' + (i === 1 ? ' active' : '');
+      const c = document.createElement('canvas');
+      const numEl = document.createElement('div');
+      numEl.className = 'thumb-num'; numEl.textContent = i;
+      item.appendChild(c); item.appendChild(numEl);
+      thumbStrip.appendChild(item);
+      item.addEventListener('click', () => renderPreview(i));
+      (async (pageNum, canvas) => {
+        try {
+          const page = await pdfJsDoc.getPage(pageNum);
+          const vp = page.getViewport({ scale: 0.22 });
+          canvas.width = vp.width; canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+        } catch(e) {}
+      })(i, c);
+    }
+  }
+
+  // ── Page Grid (Copy tab) ───────────────────────
+  async function buildPageGrid() {
+    pageGrid.innerHTML = '';
+    pageCanvases = {};
+    for (let i = 1; i <= totalPages; i++) {
+      // Card skeleton
+      const card = document.createElement('div');
+      card.className = 'page-card'; card.id = `pgcard-${i}`;
+      const wrap = document.createElement('div');
+      wrap.className = 'card-canvas-wrap';
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      const footer = document.createElement('div');
+      footer.className = 'card-footer';
+      footer.innerHTML = `
+        <span class="card-page-label">PAGE ${i}</span>
+        <button class="btn-copy-img" id="copybtn-${i}" onclick="copyPageImage(${i})">
+          <svg viewBox="0 0 12 12" fill="none"><rect x="1" y="3" width="7" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M3 3V2.5A1.5 1.5 0 014.5 1h4A1.5 1.5 0 0110 2.5v6A1.5 1.5 0 018.5 10H8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          画像コピー
+        </button>
+      `;
+      card.appendChild(wrap); card.appendChild(footer);
+      pageGrid.appendChild(card);
+
+      // Async render card canvas
+      (async (pageNum, cvs) => {
+        try {
+          const page = await pdfJsDoc.getPage(pageNum);
+          const vp = page.getViewport({ scale: 1.5 });
+          cvs.width = vp.width; cvs.height = vp.height;
+          await page.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
+          pageCanvases[pageNum] = cvs;
+        } catch(e) {}
+      })(i, canvas);
+    }
+  }
+
+  // ── Image Copy ─────────────────────────────────
+  async function copyPageImage(pageNum) {
+    const canvas = pageCanvases[pageNum];
+    const btn = document.getElementById(`copybtn-${pageNum}`);
+    const card = document.getElementById(`pgcard-${pageNum}`);
+    if (!canvas) { showToast('ページがまだ読み込まれていません'); return; }
+    try {
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      card.classList.add('copied-ok');
+      btn.classList.add('success');
+      btn.innerHTML = `<svg viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> コピー済み`;
+      showToast(`Page ${pageNum} を画像コピーしました`);
+      setTimeout(() => {
+        card.classList.remove('copied-ok');
+        btn.classList.remove('success');
+        btn.innerHTML = `<svg viewBox="0 0 12 12" fill="none"><rect x="1" y="3" width="7" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M3 3V2.5A1.5 1.5 0 014.5 1h4A1.5 1.5 0 0110 2.5v6A1.5 1.5 0 018.5 10H8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> 画像コピー`;
+      }, 2500);
+    } catch(e) {
+      showToast('コピー失敗（ブラウザ権限を確認）');
+      console.error(e);
+    }
+  }
+
+  // ── Split Logic ────────────────────────────────
+  addSegmentBtn.addEventListener('click', addSegmentRow);
+
+  function addSegmentRow() {
+    segCounter++;
+    const idx = segCounter;
+    const row = document.createElement('div');
+    row.className = 'segment'; row.dataset.id = idx;
+    row.innerHTML = `
+      <div class="seg-num">${String(idx).padStart(2,'0')}</div>
+      <div class="field-group">
+        <div class="field-label">ページ指定</div>
+        <input class="field-input pages-input" type="text" placeholder="例: 1-3, 5" autocomplete="off">
+      </div>
+      <div class="field-group">
+        <div class="field-label">ファイル名</div>
+        <input class="field-input name-input" type="text" placeholder="例: 第1章" autocomplete="off">
+      </div>
+      <button class="btn-remove" title="削除">✕</button>
+    `;
+    row.querySelector('.btn-remove').addEventListener('click', () => {
+      row.style.opacity = '0'; row.style.transform = 'translateX(-10px)';
+      setTimeout(() => { row.remove(); renumberSegments(); }, 200);
+    });
+    segmentList.appendChild(row);
+  }
+
+  function renumberSegments() {
+    segmentList.querySelectorAll('.segment').forEach((row, i) => {
+      row.querySelector('.seg-num').textContent = String(i+1).padStart(2,'0');
+    });
+  }
+
+  function parsePages(str, max) {
+    const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+    const pages = new Set();
+    for (const part of parts) {
+      if (/^\d+$/.test(part)) {
+        const n = parseInt(part);
+        if (n < 1 || n > max) return null;
+        pages.add(n);
+      } else if (/^\d+-\d+$/.test(part)) {
+        const [a, b] = part.split('-').map(Number);
+        if (a < 1 || b > max || a > b) return null;
+        for (let i = a; i <= b; i++) pages.add(i);
+      } else { return null; }
+    }
+    return pages.size ? [...pages].sort((a,b) => a-b) : null;
+  }
+
+  splitBtn.addEventListener('click', async () => {
+    errorMsg.classList.remove('visible');
+    const rows = segmentList.querySelectorAll('.segment');
+    if (!rows.length) { showSplitError('セグメントを1つ以上追加してください。'); return; }
+    const segments = []; let valid = true;
+    rows.forEach((row, i) => {
+      const pagesStr = row.querySelector('.pages-input').value.trim();
+      const nameStr = row.querySelector('.name-input').value.trim() || `segment_${i+1}`;
+      row.querySelector('.pages-input').classList.remove('error');
+      if (!pagesStr) { row.querySelector('.pages-input').classList.add('error'); valid = false; return; }
+      const pages = parsePages(pagesStr, totalPages);
+      if (!pages) { row.querySelector('.pages-input').classList.add('error'); valid = false; return; }
+      segments.push({ pages, name: nameStr });
+    });
+    if (!valid) { showSplitError(`ページ指定に誤りがあります。1〜${totalPages} の範囲で指定してください。`); return; }
+
+    splitBtn.disabled = true;
+    processingHint.textContent = '処理中…';
+    progressBar.classList.add('visible');
+    generatedFiles = []; resultList.innerHTML = '';
+
+    try {
+      const srcBytes = await pdfDoc.save();
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const newDoc = await PDFDocument.load(srcBytes);
+        const allPages = newDoc.getPageIndices();
+        const keepSet = new Set(seg.pages.map(p => p - 1));
+        const toRemove = allPages.filter(p => !keepSet.has(p)).reverse();
+        toRemove.forEach(p => newDoc.removePage(p));
+        const bytes = await newDoc.save();
+        generatedFiles.push({ name: seg.name + '.pdf', bytes, pages: seg.pages });
+        progressFill.style.width = `${Math.round((i+1)/segments.length*100)}%`;
+      }
+      renderResults();
+    } catch(e) {
+      showSplitError('分割中にエラーが発生しました: ' + e.message);
+    } finally {
+      splitBtn.disabled = false;
+      processingHint.textContent = '';
+    }
+  });
+
+  function renderResults() {
+    resultList.innerHTML = '';
+    generatedFiles.forEach((f, i) => {
+      const item = document.createElement('div');
+      item.className = 'result-item'; item.style.animationDelay = `${i * 0.05}s`;
+      item.innerHTML = `
+        <div style="width:34px;height:34px;background:rgba(71,255,232,0.08);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">📄</div>
+        <div class="result-label">
+          <div class="result-name">${escHtml(f.name)}</div>
+          <div class="result-pages">ページ: ${f.pages.join(', ')}</div>
+        </div>
+        <button class="btn-download">↓ ダウンロード</button>
+      `;
+      item.querySelector('.btn-download').addEventListener('click', () => downloadFile(f));
+      resultList.appendChild(item);
+    });
+    results.classList.add('visible');
+    results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function downloadFile(f) {
+    const blob = new Blob([f.bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = f.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function showSplitError(msg) {
+    errorMsg.textContent = msg; errorMsg.classList.add('visible');
+    errorMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── Reset ──────────────────────────────────────
+  function resetAll() {
+    pdfDoc = null; pdfJsDoc = null; totalPages = 0; pdfBytes = null;
+    pageCanvases = {}; segCounter = 0; generatedFiles = [];
+    fileInput.value = '';
+    dropZone.style.display = '';
+    fileInfo.classList.remove('visible');
+    tabs.classList.remove('visible');
+    copySection.classList.remove('visible');
+    splitSection.classList.remove('visible');
+    pageGrid.innerHTML = '';
+    thumbStrip.innerHTML = '';
+    segmentList.innerHTML = '';
+    resultList.innerHTML = '';
+    results.classList.remove('visible');
+    errorMsg.classList.remove('visible');
+    progressBar.classList.remove('visible');
+    progressFill.style.width = '0%';
+    previewCanvas.width = 0; previewCanvas.height = 0;
+  }
+
+  // ── Helpers ────────────────────────────────────
+  let toastTimer;
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
