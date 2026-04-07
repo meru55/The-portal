@@ -1,0 +1,326 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+:root{--bg:#0c0c0f;--surface:#141418;--surface2:#1c1c22;--border:#2a2a35;--accent:#e8ff47;--accent2:#47ffe8;--text:#f0f0f5;--muted:#6b6b80;--danger:#ff4757;--success:#4ade80;--radius:12px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 20px;position:relative;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 600px 400px at 80% 10%,rgba(232,255,71,0.04) 0%,transparent 70%),radial-gradient(ellipse 400px 600px at 10% 80%,rgba(71,255,232,0.03) 0%,transparent 70%);pointer-events:none;z-index:0;}
+.container{max-width:960px;margin:0 auto;position:relative;z-index:1;}
+header{margin-bottom:32px;animation:fadeUp 0.6s ease both;}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.9rem;letter-spacing:-0.02em;line-height:1;margin-bottom:6px;}
+.logo span{color:var(--accent);}
+.subtitle{color:var(--muted);font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;}
+.card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px;animation:fadeUp 0.5s ease both;}
+.section-label{font-family:'Syne',sans-serif;font-weight:700;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
+.master-status{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:0.78rem;}
+.master-status.ok{border-color:rgba(74,222,128,0.3);background:rgba(74,222,128,0.06);}
+.master-status.err{border-color:rgba(255,71,87,0.3);background:rgba(255,71,87,0.06);}
+.master-status.loading{border-color:rgba(232,255,71,0.2);}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+.dot.ok{background:var(--success);}
+.dot.err{background:var(--danger);}
+.dot.loading{background:var(--accent);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+.master-text{flex:1;}
+.master-text strong{color:var(--text);}
+.btn-reload{background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;padding:4px 10px;border-radius:5px;font-family:'DM Mono',monospace;font-size:0.68rem;transition:all 0.2s;}
+.btn-reload:hover{border-color:var(--accent);color:var(--accent);}
+.drop-zone{border:1.5px dashed var(--border);border-radius:8px;padding:36px 20px;text-align:center;cursor:pointer;transition:all 0.25s;}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:rgba(232,255,71,0.03);}
+.drop-zone.loaded{border-color:var(--success);border-style:solid;}
+.drop-title{font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;margin-bottom:6px;}
+.drop-hint{color:var(--muted);font-size:0.72rem;}
+.drop-hint strong{color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+.stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;}
+.stat-num{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:var(--text);}
+.stat-num.ok{color:var(--success);}.stat-num.warn{color:var(--danger);}
+.stat-label{font-size:0.62rem;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:0.06em;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+th{background:var(--surface2);font-family:'Syne',sans-serif;font-weight:700;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:7px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:5px 8px;border-bottom:1px solid rgba(42,42,53,0.6);color:var(--text);white-space:nowrap;vertical-align:middle;}
+tr:hover td{background:var(--surface2);}
+td input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:3px 6px;width:100%;outline:none;transition:border-color 0.2s;}
+td input:focus{border-color:var(--accent2);}
+td input.unmatched{border-color:var(--danger);background:rgba(255,71,87,0.08);}
+td input.matched{border-color:var(--success);}
+.btn-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:7px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;letter-spacing:0.05em;cursor:pointer;transition:all 0.2s;border:1.5px solid var(--border);background:transparent;color:var(--muted);}
+.btn:hover{border-color:#3a3a4a;color:var(--text);}
+.btn:disabled{opacity:0.35;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+.btn-primary:hover:not(:disabled){background:#f0ff70;border-color:#f0ff70;transform:translateY(-1px);box-shadow:0 6px 20px rgba(232,255,71,0.2);}
+.btn-secondary{border-color:rgba(71,255,232,0.25);color:var(--accent2);background:rgba(71,255,232,0.05);}
+.btn-secondary:hover{background:rgba(71,255,232,0.12);border-color:var(--accent2);transform:translateY(-1px);}
+.msg{font-size:0.7rem;color:var(--muted);}.msg.ok{color:var(--success);}
+.badge{display:inline-block;font-size:0.6rem;padding:2px 7px;border-radius:4px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin-left:8px;}
+.badge-warn{background:rgba(255,71,87,0.15);color:var(--danger);border:1px solid rgba(255,71,87,0.3);}
+.badge-ok{background:rgba(74,222,128,0.12);color:var(--success);border:1px solid rgba(74,222,128,0.25);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="logo">受注取込<span>ハウステック</span></div>
+  <div class="subtitle">発注データ（TSV）→ 受注CSV 変換ツール ／ ブラウザ完結</div>
+</header>
+
+<!-- 品番マスタ ステータス -->
+<div class="card" style="animation-delay:0.03s">
+  <div class="section-label">品番マスタ</div>
+  <div class="master-status loading" id="masterStatus">
+    <div class="dot loading" id="masterDot"></div>
+    <div class="master-text" id="masterText"><span style="color:var(--muted)">hinmei_master.xlsx を読み込み中...</span></div>
+  </div>
+</div>
+
+<!-- 発注データ -->
+<div class="card" style="animation-delay:0.07s">
+  <div class="section-label">発注データ ファイル</div>
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-title" id="dropTitle">ファイルをここにドロップ</div>
+    <div class="drop-hint">または <strong id="browseBtn">ファイルを選択</strong></div>
+    <input type="file" id="tsvFile" style="display:none" onchange="onFileSelect(this)">
+  </div>
+  <div id="fileMsg" style="font-size:0.7rem;color:var(--muted);margin-top:8px;"></div>
+</div>
+
+<!-- 受注データテーブル -->
+<div class="card" id="dataCard" style="display:none;animation-delay:0.11s">
+  <div class="section-label">受注データ <span id="headerBadge"></span></div>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num" id="sTotal">0</div><div class="stat-label">合計件数</div></div>
+    <div class="stat"><div class="stat-num ok" id="sMatched">0</div><div class="stat-label">照合済</div></div>
+    <div class="stat"><div class="stat-num warn" id="sUnmatched">0</div><div class="stat-label">未照合</div></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:22px">#</th>
+          <th style="width:70px">受注日(E)</th>
+          <th style="width:58px">得意先(F)</th>
+          <th style="width:62px">納入先(H)</th>
+          <th style="width:82px">資材コード</th>
+          <th style="width:110px">社内品番(I)</th>
+          <th style="width:38px">数量(K)</th>
+          <th style="width:70px">納期(N)</th>
+          <th style="width:70px">出荷予定(O)</th>
+          <th style="width:100px">客先発注番号(X)</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="dlBtn" onclick="downloadCSV()" disabled>↓ CSV ダウンロード</button>
+    <button class="btn btn-secondary" onclick="recalc()">営業日再計算</button>
+    <span class="msg" id="dlMsg"></span>
+  </div>
+</div>
+
+</div>
+<script>
+const TOKUISAKI="000440";
+let partMap={};
+let holidays=[];
+let parsedRows=[];
+
+function getNyusakiCode(haisaki){
+  const s=String(haisaki||'');
+  if(/第.?[１1]|N01|第1/i.test(s)) return "001440";
+  if(/第.?[２2]|N02|第2/i.test(s)) return "002440";
+  if(/滋賀/i.test(s)) return "004440";
+  return "";
+}
+function toYYYYMMDD(s){s=String(s).trim();if(s.length===6)return '20'+s;if(s.length===8)return s;return s;}
+async function fetchHolidays(){
+  for(const y of [2025,2026,2027]){
+    try{const r=await fetch(`https://holidays-jp.github.io/api/v1/${y}/date.json`);if(r.ok){const d=await r.json();holidays=holidays.concat(Object.keys(d));}}catch(e){}
+  }
+}
+function isHoliday(s){const d=parseDate(s);const w=d.getDay();return w===0||w===6||holidays.includes(s);}
+function parseDate(s){return new Date(s.slice(0,4),parseInt(s.slice(4,6))-1,parseInt(s.slice(6,8)));}
+function fmtDate(d){return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;}
+function addBiz(s,n){
+  let d=parseDate(s);const dir=n<0?-1:1;let cnt=0;
+  while(cnt<Math.abs(n)){d.setDate(d.getDate()+dir);if(!isHoliday(fmtDate(d)))cnt++;}
+  return fmtDate(d);
+}
+
+// ── hinmei_master.xlsx 自動読み込み ──────────────
+async function loadMaster(){
+  const status=document.getElementById('masterStatus');
+  const dot=document.getElementById('masterDot');
+  const text=document.getElementById('masterText');
+  try{
+    const res=await fetch('./hinmei_master.xlsx',{cache:'no-cache'});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf=await res.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    let count=0;
+    rows.forEach(row=>{
+      if(row.length>=2&&row[0]&&row[1]){
+        const k=String(row[0]).trim();const v=String(row[1]).trim();
+        if(k&&v&&k!=='資材コード'){partMap[k]=v;count++;}
+      }
+    });
+    status.className='master-status ok';
+    dot.className='dot ok';
+    text.innerHTML=`<strong>hinmei_master.xlsx</strong> &nbsp;${count}件読み込み済み`;
+    // リロードボタン追加
+    const btn=document.createElement('button');
+    btn.className='btn-reload';btn.textContent='再読込';
+    btn.onclick=()=>{partMap={};loadMaster().then(()=>{if(parsedRows.length>0)renderTable();});};
+    status.appendChild(btn);
+    // 既にデータがあれば再照合
+    if(parsedRows.length>0)renderTable();
+  }catch(e){
+    status.className='master-status err';
+    dot.className='dot err';
+    text.innerHTML=`<span style="color:var(--danger)">hinmei_master.xlsx が見つかりません</span><span style="color:var(--muted);font-size:0.68rem;margin-left:8px">同じフォルダに配置してください</span>`;
+    const btn=document.createElement('button');
+    btn.className='btn-reload';btn.textContent='再試行';
+    btn.onclick=()=>{
+      dot.className='dot loading';
+      text.innerHTML='<span style="color:var(--muted)">読み込み中...</span>';
+      status.className='master-status loading';
+      status.querySelectorAll('.btn-reload').forEach(b=>b.remove());
+      partMap={};loadMaster().then(()=>{if(parsedRows.length>0)renderTable();});
+    };
+    status.appendChild(btn);
+  }
+}
+
+// ── TSV ファイル drop ─────────────────────────
+const dropZone=document.getElementById('dropZone');
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)handleFile(f);});
+document.getElementById('browseBtn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('tsvFile').click();});
+dropZone.addEventListener('click',()=>document.getElementById('tsvFile').click());
+function onFileSelect(inp){if(inp.files[0])handleFile(inp.files[0]);}
+
+function handleFile(file){
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const bytes=new Uint8Array(e.target.result);
+    const text=new TextDecoder('shift-jis').decode(bytes);
+    parseTSV(text,file.name);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseTSV(text,filename){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2){document.getElementById('fileMsg').textContent='データが見つかりませんでした';return;}
+  const headers=lines[0].split('\t').map(h=>h.trim());
+  const idx={
+    shizai:  headers.indexOf('資材コード'),
+    qty:     headers.indexOf('発注数量'),
+    date:    headers.indexOf('注文日'),
+    noki:    headers.indexOf('要求納期'),
+    jban:    headers.indexOf('注文番号'),
+    haisaki: headers.indexOf('配達先名'),
+  };
+  parsedRows=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=lines[i].split('\t').map(c=>c.trim());
+    if(cols.length<headers.length)continue;
+    const shizai=cols[idx.shizai]||'';
+    const qty=parseFloat(cols[idx.qty])||0;
+    const chaku=toYYYYMMDD(cols[idx.noki]||'');
+    const jban=cols[idx.jban]||'';
+    const haisaki=cols[idx.haisaki]||'';
+    const juDate=toYYYYMMDD(cols[idx.date]||'');
+    if(!shizai||!chaku||qty<=0)continue;
+    parsedRows.push({shizai,chaku,qty,jban,haisaki,juDate});
+  }
+  if(parsedRows.length===0){document.getElementById('fileMsg').textContent='変換できる行がありませんでした';return;}
+  dropZone.classList.add('loaded');
+  document.getElementById('dropTitle').innerHTML=`<span style="color:var(--success)">✓ ${filename}</span>`;
+  document.getElementById('fileMsg').textContent=`${parsedRows.length}件を読み込みました`;
+  document.getElementById('dataCard').style.display='block';
+  document.getElementById('dlBtn').disabled=false;
+  renderTable();
+}
+
+function updateStats(){
+  let m=0;parsedRows.forEach(r=>{if(partMap[r.shizai])m++;});
+  const total=parsedRows.length;
+  document.getElementById('sTotal').textContent=total;
+  document.getElementById('sMatched').textContent=m;
+  document.getElementById('sUnmatched').textContent=total-m;
+  const b=document.getElementById('headerBadge');
+  if(!total){b.textContent='';return;}
+  if(m===total){b.className='badge badge-ok';b.textContent='全件照合済';}
+  else if(m>0){b.className='badge badge-warn';b.textContent=`${total-m}件未照合`;}
+  else{b.className='badge badge-warn';b.textContent='未照合';}
+}
+
+function renderTable(){
+  const tbody=document.getElementById('tbody');tbody.innerHTML='';
+  parsedRows.forEach((r,i)=>{
+    const noki=addBiz(r.chaku,-2);
+    const shukka=addBiz(noki,-1);
+    const pn=partMap[r.shizai]||'';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td style="color:var(--muted);font-size:10px">${i+1}</td>
+      <td>${r.juDate}</td>
+      <td>${TOKUISAKI}</td>
+      <td>${getNyusakiCode(r.haisaki)}</td>
+      <td style="color:var(--muted)">${r.shizai}</td>
+      <td><input class="${pn?'matched':'unmatched'}" value="${pn||r.shizai}" data-idx="${i}" onchange="onPartEdit(this)"></td>
+      <td style="color:var(--accent);font-weight:500">${r.qty}</td>
+      <td>${noki}</td>
+      <td>${shukka}</td>
+      <td style="color:var(--accent2)">${r.jban}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateStats();
+}
+
+function onPartEdit(el){
+  const idx=parseInt(el.dataset.idx);
+  partMap[parsedRows[idx].shizai]=el.value.trim();
+  el.className=el.value.trim()?'matched':'unmatched';
+  updateStats();
+}
+function recalc(){renderTable();const m=document.getElementById('dlMsg');m.textContent='再計算しました';m.className='msg ok';setTimeout(()=>{m.textContent='';m.className='msg';},2000);}
+
+function downloadCSV(){
+  const inputs=document.querySelectorAll('#tbody td input');
+  const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','分納区分','ロケーションコード','分類コード1','分類コード2','分類コード3','分類コード4','分類コード5','部署コード','客先発注番号','客先管理番号','備考'];
+  const lines=[hdr.join(',')];
+  parsedRows.forEach((r,i)=>{
+    const pn=inputs[i]?inputs[i].value:(partMap[r.shizai]||r.shizai);
+    const noki=addBiz(r.chaku,-2);const shukka=addBiz(noki,-1);
+    const row=['','','','',r.juDate,TOKUISAKI,'',getNyusakiCode(r.haisaki),pn,'',r.qty,'','',noki,shukka,'','','','','','','','',r.jban,'',''];
+    lines.push(row.map(v=>{const s=String(v??'');return s.includes(',')?`"${s}"`:s;}).join(','));
+  });
+  const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='受注取込_ハウステック.csv';a.click();
+  const m=document.getElementById('dlMsg');m.textContent='ダウンロードしました';m.className='msg ok';
+  setTimeout(()=>{m.textContent='';m.className='msg';},3000);
+}
+
+fetchHolidays();
+loadMaster();
+</script>
+</body>
+</html>
