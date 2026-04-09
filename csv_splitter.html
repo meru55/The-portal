@@ -2,7 +2,6 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
 :root{--bg:#0c0c0f;--surface:#141418;--surface2:#1c1c22;--border:#2a2a35;--accent:#e8ff47;--accent2:#47ffe8;--text:#f0f0f5;--muted:#6b6b80;--danger:#ff4757;--success:#4ade80;--radius:12px;}
@@ -128,7 +127,7 @@ header{margin-bottom:32px;animation:fadeUp 0.6s ease both;}
   </div>
   <div class="chunks-grid" id="chunksGrid"></div>
   <div class="btn-row">
-    <button class="btn btn-primary"   onclick="downloadAll('auto')">↓ 一括ダウンロード (ZIP)</button>
+    <button class="btn btn-primary"   onclick="downloadAll('auto')">↓ 一括ダウンロード</button>
     <button class="btn btn-secondary" onclick="renderAuto()">再分割</button>
     <span class="msg" id="dlMsgAuto"></span>
   </div>
@@ -144,7 +143,7 @@ header{margin-bottom:32px;animation:fadeUp 0.6s ease both;}
   </div>
   <div class="row-list" id="rowList"></div>
   <div class="btn-row">
-    <button class="btn btn-primary"   onclick="downloadAll('manual')">↓ 一括ダウンロード (ZIP)</button>
+    <button class="btn btn-primary"   onclick="downloadAll('manual')">↓ 一括ダウンロード</button>
     <button class="btn btn-secondary" onclick="clearDividers()">区切りをリセット</button>
     <span class="msg" id="dlMsgManual"></span>
   </div>
@@ -315,9 +314,8 @@ function manualContent(idx) {
   return '\uFEFF' + [csvHeader, ...csvDataRows.slice(c.start, c.end)].join('\n');
 }
 
-// ── 一括 ZIP ─────────────────────────────────────
+// ── 一括ダウンロード（連続DL・ZIPなし）────────────
 async function downloadAll(mode) {
-  const zip = new JSZip();
   let total, getContent, getName;
   if (mode === 'auto') {
     const n = Math.max(1, parseInt(document.getElementById('chunkSize').value) || 10);
@@ -330,12 +328,15 @@ async function downloadAll(mode) {
     getContent = i => manualContent(i);
     getName    = i => makeFilename(i+1, total);
   }
-  for (let i = 0; i < total; i++) zip.file(getName(i), getContent(i));
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `${baseFilename}_split.zip`; a.click();
+  for (let i = 0; i < total; i++) {
+    await new Promise(resolve => setTimeout(resolve, i === 0 ? 0 : 400));
+    const blob = new Blob([getContent(i)], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = getName(i); a.click();
+    URL.revokeObjectURL(a.href);
+  }
   const m = document.getElementById(mode === 'auto' ? 'dlMsgAuto' : 'dlMsgManual');
-  m.textContent = `${total}ファイルをZIPで出力しました`; m.className = 'msg ok';
+  m.textContent = `${total}ファイルをダウンロードしました`; m.className = 'msg ok';
   setTimeout(() => { m.textContent = ''; m.className = 'msg'; }, 3000);
 }
 </script>
