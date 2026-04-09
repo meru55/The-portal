@@ -407,7 +407,7 @@ function renderTable() {
       <td style="color:var(--accent);font-weight:500">${r.suryo}</td>
       <td>${noki ? dispYMD(noki) : ''}</td>
       <td>${dispYMD(shipDateStr)}</td>
-      <td style="color:var(--accent2)">${r.orderNo}</td>
+      <td style="color:var(--accent2)">${r.shiryouNo}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -442,7 +442,7 @@ function downloadCSV() {
   parsedRows.forEach((r, i) => {
     const pn   = inputs[i] ? inputs[i].value : (partMap[r.misawaHinban] || r.misawaHinban);
     const noki = r.nohinDate ? subBiz(r.nohinDate, 2) : '';
-    const row  = ['','','',String(i+1).padStart(3,'0'),pdfOrderDate,TOKUISAKI_CODE,'',TOKUISAKI_CODE,pn,'',r.suryo,'','',noki,shipDateStr,'','','','','','','','',r.orderNo,'',''];
+    const row  = ['','','',String(i+1).padStart(3,'0'),r.orderDate||pdfOrderDate,TOKUISAKI_CODE,'',TOKUISAKI_CODE,pn,'',r.suryo,'','',noki,shipDateStr,'','','','','','','','',r.shiryouNo,'',''];
     lines.push(row.map(v => { const s = String(v ?? ''); return s.includes(',') ? `"${s}"` : s; }).join(','));
   });
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
