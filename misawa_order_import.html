@@ -289,91 +289,82 @@ function handlePDF(file) {
         cMapPacked: true
       }).promise;
 
-      // x座標によるカラム定義（pdfplumberで確認済みの値）
-      // 資材発注No: x≈47, 品番: x≈115, 数量: x≈280, 納品指定日: x≈704
+      // x座標カラム定義（pdfplumberで確認済み）
       const COL = { shiryouNo: [40, 70], hinban: [108, 145], suryo: [272, 292], nohinDate: [695, 720] };
-      // 発注日: x≈100, 発注元注文No: x≈100 top≈38
-      const COL_ORDERDATE = [95, 115];
-      const COL_ORDERNO   = [95, 160];
 
-      let allWords = []; // {x, top, text}
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page    = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        const vp      = page.getViewport({ scale: 1 });
-        content.items.forEach(item => {
-          const x   = item.transform[4];
-          const top = vp.height - item.transform[5]; // PDF座標は下が0なので反転
-          if (item.str.trim()) allWords.push({ x, top, text: item.str.trim() });
-        });
-      }
-
-      // top値を3pt単位でグループ化して「行」を作る
-      const rowMap = {};
-      allWords.forEach(w => {
-        const key = Math.round(w.top / 3) * 3;
-        rowMap[key] = rowMap[key] || [];
-        rowMap[key].push(w);
-      });
-
-      // x範囲内の最初のテキストを取得するヘルパー
       const getCol = (words, xMin, xMax) => {
         const w = words.filter(w => w.x >= xMin && w.x <= xMax).sort((a, b) => a.x - b.x)[0];
         return w ? w.text : '';
       };
 
-      // 発注日・発注元注文Noを取得（top < 100の行から）
-      const headerRows = Object.entries(rowMap)
-        .filter(([top]) => Number(top) < 100)
-        .map(([, words]) => words);
-
+      // ページ単位でパース（複数ロット・複数発注日に対応）
       pdfOrderDate = '';
       let orderNo  = '';
-      headerRows.forEach(words => {
-        words.forEach(w => {
-          if (/^発注日/.test(w.text)) {
-            // 同行のx≈100あたりの日付を取得
-            const d = getCol(words, 95, 120);
-            if (/^\d{2}\/\d{2}\/\d{2}$/.test(d)) pdfOrderDate = parsePdfDate(d);
-          }
-          // 発注元注文No: x≈100, top≈38 の「数字-数字」形式
-          if (/^\d{5}-\d{2}$/.test(w.text)) orderNo = w.text;
-        });
-      });
-      document.getElementById('d-orderdate').textContent = pdfOrderDate ? dispYMD(pdfOrderDate) : '—';
-
-      // データ行を抽出: x≈47にある8桁数字の行
-      parsedRows = [];
-      Object.entries(rowMap)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .forEach(([, words]) => {
-          const shiryouNo = getCol(words, COL.shiryouNo[0], COL.shiryouNo[1]);
-          if (!/^\d{8}$/.test(shiryouNo)) return; // 8桁数字でなければスキップ
-
-          // 品番: x≈115 の英大文字+数字+ハイフン形式
-          let hinban = getCol(words, COL.hinban[0], COL.hinban[1]);
-          // 品番が同行にない場合（一部行でずれることがある）は前後3ptの行も検索
-          if (!hinban || !/^[A-Z0-9]+-/.test(hinban)) hinban = '';
-
-          const suryoStr  = getCol(words, COL.suryo[0],    COL.suryo[1]);
-          const nohinStr  = getCol(words, COL.nohinDate[0], COL.nohinDate[1]);
-
-          parsedRows.push({
-            shiryouNo,
-            misawaHinban: hinban,
-            suryo:        Number(suryoStr) || 0,
-            nohinDate:    /^\d{2}\/\d{2}\/\d{2}$/.test(nohinStr) ? parsePdfDate(nohinStr) : '',
-            orderNo,
-          });
-        });
-
-      // 品番が空の行は近傍行から補完（工場ストア品は品番が別行になる場合あり）
-      // 同じ品番が続く場合は前行から引き継ぐ
+      parsedRows   = [];
       let lastHinban = '';
-      parsedRows = parsedRows.map(r => {
-        if (r.misawaHinban) { lastHinban = r.misawaHinban; return r; }
-        return { ...r, misawaHinban: lastHinban };
-      });
+
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page    = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        const vp      = page.getViewport({ scale: 1 });
+
+        const pageWords = [];
+        content.items.forEach(item => {
+          const x   = item.transform[4];
+          const top = vp.height - item.transform[5];
+          if (item.str.trim()) pageWords.push({ x, top, text: item.str.trim() });
+        });
+
+        const rowMap = {};
+        pageWords.forEach(w => {
+          const key = Math.round(w.top / 3) * 3;
+          rowMap[key] = rowMap[key] || [];
+          rowMap[key].push(w);
+        });
+
+        // ヘッダー（top < 100）からこのページの発注日・注文Noを取得
+        let pageOrderDate = '';
+        let pageOrderNo   = orderNo; // 前ページから引き継ぎ
+        Object.entries(rowMap)
+          .filter(([top]) => Number(top) < 100)
+          .forEach(([, words]) => {
+            words.forEach(w => {
+              if (/^発注日/.test(w.text)) {
+                const d = getCol(words, 95, 120);
+                if (/^\d{2}\/\d{2}\/\d{2}$/.test(d)) pageOrderDate = parsePdfDate(d);
+              }
+              if (/^\d{5}-\d{2}$/.test(w.text)) pageOrderNo = w.text;
+            });
+          });
+        // 最初のページの発注日を表示用に使用
+        if (!pdfOrderDate && pageOrderDate) pdfOrderDate = pageOrderDate;
+        orderNo = pageOrderNo;
+
+        // データ行抽出（このページの発注日を各行に紐づける）
+        Object.entries(rowMap)
+          .sort(([a], [b]) => Number(a) - Number(b))
+          .forEach(([, words]) => {
+            const shiryouNo = getCol(words, COL.shiryouNo[0], COL.shiryouNo[1]);
+            if (!/^\d{8}$/.test(shiryouNo)) return;
+
+            let hinban = getCol(words, COL.hinban[0], COL.hinban[1]);
+            if (!hinban || !/^[A-Z0-9]+-/.test(hinban)) hinban = '';
+            if (hinban) lastHinban = hinban;
+            else hinban = lastHinban;
+
+            const suryoStr = getCol(words, COL.suryo[0], COL.suryo[1]);
+            const nohinStr = getCol(words, COL.nohinDate[0], COL.nohinDate[1]);
+
+            parsedRows.push({
+              shiryouNo,
+              misawaHinban: hinban,
+              suryo:        Number(suryoStr) || 0,
+              nohinDate:    /^\d{2}\/\d{2}\/\d{2}$/.test(nohinStr) ? parsePdfDate(nohinStr) : '',
+              orderNo:      pageOrderNo,
+              orderDate:    pageOrderDate, // ページごとの発注日
+            });
+          });
+      }
 
       if (parsedRows.length === 0) {
         document.getElementById('fileMsg').textContent = '❌ データ行が見つかりませんでした。MAP009形式のPDFか確認してください。';
@@ -407,7 +398,7 @@ function renderTable() {
     const tr   = document.createElement('tr');
     tr.innerHTML = `
       <td style="color:var(--muted);font-size:10px">${i+1}</td>
-      <td>${pdfOrderDate ? dispYMD(pdfOrderDate) : ''}</td>
+      <td>${r.orderDate ? dispYMD(r.orderDate) : ''}</td>
       <td>${TOKUISAKI_CODE}</td>
       <td>${TOKUISAKI_CODE}</td>
       <td style="color:var(--muted)">${r.shiryouNo}</td>
