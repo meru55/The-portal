@@ -60,6 +60,7 @@
   /* ── ヘッダー ── */
   header {
     margin-bottom: 64px;
+    animation: fadeUp 0.5s ease both;
   }
 
   .eyebrow {
@@ -92,6 +93,56 @@
     line-height: 1.7;
   }
 
+  /* ── タブ ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    animation: fadeUp 0.5s 0.1s ease both;
+  }
+
+  .tab-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.18s;
+  }
+
+  .tab-btn::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform 0.18s;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+
+  .tab-btn.active {
+    color: var(--accent);
+  }
+
+  .tab-btn.active::after {
+    transform: scaleX(1);
+  }
+
+  /* ── タブパネル ── */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
   /* ── セクション ── */
   .section-label {
     font-family: 'DM Mono', monospace;
@@ -103,6 +154,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    animation: fadeUp 0.5s 0.15s ease both;
   }
 
   .section-label::after {
@@ -122,6 +174,7 @@
     border-radius: var(--radius);
     overflow: hidden;
     margin-bottom: 1px;
+    animation: fadeUp 0.5s 0.25s ease both;
   }
 
   /* ── カード ── */
@@ -211,6 +264,58 @@
     transition: opacity 0.18s, transform 0.18s;
   }
 
+  /* ── リンクリスト ── */
+  .link-list {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    animation: fadeUp 0.5s 0.25s ease both;
+  }
+
+  .link-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.18s;
+  }
+
+  .link-row:last-child { border-bottom: none; }
+
+  .link-row:hover { background: var(--surface-hover); }
+
+  .link-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    flex: 1;
+    letter-spacing: -0.01em;
+    transition: color 0.18s;
+  }
+
+  .link-name:hover { color: var(--accent); }
+
+  .link-manual {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 4px;
+    transition: color 0.18s, border-color 0.18s;
+  }
+
+  .link-manual:hover {
+    color: var(--accent);
+    border-color: rgba(200,255,100,0.3);
+  }
+
   /* ── フッター ── */
   footer {
     margin-top: 64px;
@@ -221,6 +326,7 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 12px;
+    animation: fadeUp 0.5s 0.35s ease both;
   }
 
   .footer-text {
@@ -248,16 +354,12 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  header         { animation: fadeUp 0.5s ease both; }
-  .section-label { animation: fadeUp 0.5s 0.15s ease both; }
-  .grid          { animation: fadeUp 0.5s 0.25s ease both; }
-  footer         { animation: fadeUp 0.5s 0.35s ease both; }
-
   /* ── レスポンシブ ── */
   @media (max-width: 480px) {
     .wrapper { padding: 48px 16px 48px; }
     header { margin-bottom: 40px; }
     .grid { grid-template-columns: 1fr; }
+    .link-row { flex-direction: column; align-items: flex-start; gap: 8px; }
   }
 </style>
 </head>
@@ -270,75 +372,158 @@
     <p class="header-desc">自分で作ったツール・サービスをまとめたポータルです。</p>
   </header>
 
-  <p class="section-label">projects</p>
+  <!-- タブ -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('tools', this)">ツール一覧</button>
+    <button class="tab-btn" onclick="switchTab('links', this)">リンク一覧</button>
+  </div>
 
-  <div class="grid">
+  <!-- ツール一覧 -->
+  <div id="tab-tools" class="tab-panel active">
+    <p class="section-label">projects</p>
+    <div class="grid">
 
-    <!-- ▼▼▼ ここにサイトを追加・編集してください ▼▼▼ -->
+      <!-- ▼▼▼ ここにサイトを追加・編集してください ▼▼▼ -->
 
-    <a class="card" href="https://meru55.github.io/The-portal/youkenteigi.html" target="_blank" rel="noopener">
-      <div class="card-icon">📦</div>
-      <p class="card-title">要件定義ツール</p>
-      <p class="card-desc">要件の定義を明確化するツール</p>
-      <div class="card-footer">
-        <span class="card-tag">業務ツール</span>
-        <span class="card-arrow">↗</span>
+      <a class="card" href="https://meru55.github.io/The-portal/youkenteigi.html" target="_blank" rel="noopener">
+        <div class="card-icon">📦</div>
+        <p class="card-title">要件定義ツール</p>
+        <p class="card-desc">要件の定義を明確化するツール</p>
+        <div class="card-footer">
+          <span class="card-tag">業務ツール</span>
+          <span class="card-arrow">↗</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://meru55.github.io/The-portal/asahi_order_import.html" target="_blank" rel="noopener">
+        <div class="card-icon">📜</div>
+        <p class="card-title">受注取り込みツール（旭化成住工）</p>
+        <p class="card-desc">旭化成住工の受注業務の効率化を手助けするツール</p>
+        <div class="card-footer">
+          <span class="card-tag">受注</span>
+          <span class="card-arrow">↗</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://meru55.github.io/The-portal/hausted_order_import.html" target="_blank" rel="noopener">
+        <div class="card-icon">📜</div>
+        <p class="card-title">受注取り込みツール（ハウステック）</p>
+        <p class="card-desc">ハウステックの受注業務の効率化を手助けするツール</p>
+        <div class="card-footer">
+          <span class="card-tag">受注</span>
+          <span class="card-arrow">↗</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://meru55.github.io/The-portal/misawa_order_import.html" target="_blank" rel="noopener">
+        <div class="card-icon">📜</div>
+        <p class="card-title">受注取り込みツール（ミサワ）</p>
+        <p class="card-desc">ミサワの受注業務の効率化を手助けするツール</p>
+        <div class="card-footer">
+          <span class="card-tag">受注</span>
+          <span class="card-arrow">↗</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://meru55.github.io/The-portal/csv_splitter.html" target="_blank" rel="noopener">
+        <div class="card-icon">📊</div>
+        <p class="card-title">CSV分割ツール</p>
+        <p class="card-desc">CSVファイルを分割するツール</p>
+        <div class="card-footer">
+          <span class="card-tag">ファイル管理</span>
+          <span class="card-arrow">↗</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://meru55.github.io/The-portal/pdf-toolkit.html" target="_blank" rel="noopener">
+        <div class="card-icon">✂️</div>
+        <p class="card-title">PDFツール</p>
+        <p class="card-desc">PDFをページごとに分割、コピーできるツール</p>
+        <div class="card-footer">
+          <span class="card-tag">文書管理</span>
+          <span class="card-arrow">↗</span>
+        </div>
+      </a>
+
+      <!-- ▲▲▲ ここまで ▲▲▲ -->
+
+    </div>
+  </div>
+
+  <!-- リンク一覧 -->
+  <div id="tab-links" class="tab-panel">
+    <p class="section-label">links</p>
+    <div class="link-list">
+
+      <div class="link-row">
+        <a class="link-name" href="https://anet.cs-logi.co.jp/Login.action" target="_blank" rel="noopener">CSロジスティクス 調達管理システム（a-net）</a>
+        <a class="link-manual" href="1.a.netマニュアル 2025.4.2Q&A追加.pdf" target="_blank" rel="noopener">マニュアル</a>
       </div>
-    </a>
 
-    <a class="card" href="https://meru55.github.io/The-portal/asahi_order_import.html" target="_blank" rel="noopener">
-      <div class="card-icon">📜</div>
-      <p class="card-title">受注取り込みツール（旭化成住工）</p>
-      <p class="card-desc">旭化成住工の受注業務の効率化を手助けするツール</p>
-      <div class="card-footer">
-        <span class="card-tag">受注</span>
-        <span class="card-arrow">↗</span>
+      <div class="link-row">
+        <a class="link-name" href="https://edi.housetec.co.jp/webedi/doc/servlet/jsp/JCLOGIN.jsp" target="_blank" rel="noopener">ハウステック EDI</a>
+        <a class="link-manual" href="ハウステック_マニュアル全集.pdf" target="_blank" rel="noopener">マニュアル</a>
       </div>
-    </a>
 
-    <a class="card" href="https://meru55.github.io/The-portal/hausted_order_import.html" target="_blank" rel="noopener">
-      <div class="card-icon">📜</div>
-      <p class="card-title">受注取り込みツール（ハウステック）</p>
-      <p class="card-desc">ハウステックの受注業務の効率化を手助けするツール</p>
-      <div class="card-footer">
-        <span class="card-tag">受注</span>
-        <span class="card-arrow">↗</span>
+      <div class="link-row">
+        <a class="link-name" href="https://heim-supply81.srp.sekisui.com/CGI-BIN/LANSAWEB" target="_blank" rel="noopener">積水ハウス HEIM-SUPPLY（資材発注）</a>
       </div>
-    </a>
 
-    <a class="card" href="https://meru55.github.io/The-portal/misawa_order_import.html" target="_blank" rel="noopener">
-      <div class="card-icon">📜</div>
-      <p class="card-title">受注取り込みツール（ミサワ）</p>
-      <p class="card-desc">ミサワの受注業務の効率化を手助けするツール</p>
-      <div class="card-footer">
-        <span class="card-tag">受注</span>
-        <span class="card-arrow">↗</span>
+      <div class="link-row">
+        <a class="link-name" href="https://kbnet.nichiha.co.jp/" target="_blank" rel="noopener">ニチハ KBnet（建材発注）</a>
       </div>
-    </a>
 
-    <a class="card" href="https://meru55.github.io/The-portal/csv_splitter.html" target="_blank" rel="noopener">
-      <div class="card-icon">📊</div>
-      <p class="card-title">CSV分割ツール</p>
-      <p class="card-desc">CSVファイルを分割するツール</p>
-      <div class="card-footer">
-        <span class="card-tag">ファイル管理</span>
-        <span class="card-arrow">↗</span>
+      <div class="link-row">
+        <a class="link-name" href="https://login.srp.sekisui.com/" target="_blank" rel="noopener">積水ハウス SRP ログイン</a>
       </div>
-    </a>
 
-    <a class="card" href="https://meru55.github.io/The-portal/pdf-toolkit.html" target="_blank" rel="noopener">
-      <div class="card-icon">✂️</div>
-      <p class="card-title">PDFツール</p>
-      <p class="card-desc">PDFをページごとに分割、コピーできるツール</p>
-      <div class="card-footer">
-        <span class="card-tag">文書管理</span>
-        <span class="card-arrow">↗</span>
+      <div class="link-row">
+        <a class="link-name" href="https://millhebel.com/" target="_blank" rel="noopener">ミルヘベル（旭化成 建材発注）</a>
       </div>
-    </a>
 
+      <div class="link-row">
+        <a class="link-name" href="https://rbzebrina.eco-serv.jp/afgc2/mypage" target="_blank" rel="noopener">旭ファイバーグラス 楽楽明細（Web請求書）</a>
+      </div>
 
-    <!-- ▲▲▲ ここまで ▲▲▲ -->
+      <div class="link-row">
+        <a class="link-name" href="https://s-port.srp.sekisui.com/" target="_blank" rel="noopener">積水ハウス S-PORT（施工者ポータル）</a>
+      </div>
 
+      <div class="link-row">
+        <a class="link-name" href="https://shizai.misawa.co.jp/" target="_blank" rel="noopener">ミサワホーム 資材発注</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://trportal.misawa.co.jp/" target="_blank" rel="noopener">ミサワホーム TRポータル（取引先ポータル）</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://weborder.tfc-misawa.jp/" target="_blank" rel="noopener">ミサワホーム TFC Web発注</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://www.g-eps.toto.co.jp/OFCOM020.aspx" target="_blank" rel="noopener">TOTO G-EPS（資材発注）</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://www.infomart.co.jp/scripts/logon.asp" target="_blank" rel="noopener">インフォマート BtoBプラットフォーム（受発注）</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://www2.okamura.co.jp/okmnet/pinet/" target="_blank" rel="noopener">オカムラ 家具・オフィス発注</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://ap.meitetsuunyu.co.jp/koguma8/" target="_blank" rel="noopener">名鉄運輸 こぐまくん</a>
+        <a class="link-manual" href="名鉄運輸_こぐまくん.pdf" target="_blank" rel="noopener">マニュアル</a>
+      </div>
+
+      <div class="link-row">
+        <a class="link-name" href="https://easypro.tonami.co.jp/EasyProWeb/servlet/tran.FCOM0010?" target="_blank" rel="noopener">トナミ運輸</a>
+        <a class="link-manual" href="トナミEasyProWeb_Manual.pdf" target="_blank" rel="noopener">マニュアル</a>
+      </div>
+
+    </div>
   </div>
 
   <footer>
@@ -347,5 +532,14 @@
   </footer>
 
 </div>
+
+<script>
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+</script>
 </body>
 </html>
