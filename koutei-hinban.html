@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工程表 品番書き込みツール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0f;
+    --panel: #16161a;
+    --panel-2: #1d1d22;
+    --border: #2a2a31;
+    --text: #e8e8ec;
+    --muted: #8a8a94;
+    --accent: #e8ff47;
+    --accent-dim: #a8bd2e;
+    --error: #ff6b6b;
+    --success: #6bff9a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; font-size: 14px; min-height: 100vh; }
+  body { padding: 40px 24px; max-width: 960px; margin: 0 auto; }
+  h1 { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 32px; letter-spacing: -0.02em; margin-bottom: 8px; }
+  h1 .accent { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 24px; margin-bottom: 16px; }
+  .panel h2 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+  .status-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .dot.err { background: var(--error); }
+  .drop-zone { border: 2px dashed var(--border); border-radius: 4px; padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--panel-2); }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(232, 255, 71, 0.04); }
+  .drop-zone .big { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+  .drop-zone .small { color: var(--muted); font-size: 12px; }
+  input[type=file] { display: none; }
+  button { font-family: 'DM Mono', monospace; font-size: 13px; padding: 12px 20px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 4px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 500; }
+  button.primary:hover:not(:disabled) { background: var(--accent-dim); border-color: var(--accent-dim); color: var(--bg); }
+  .actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .log { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 16px; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .log .ok { color: var(--success); }
+  .log .err { color: var(--error); }
+  .log .info { color: var(--muted); }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .summary .card { background: var(--panel-2); border: 1px solid var(--border); padding: 16px; border-radius: 4px; }
+  .summary .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .summary .value { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 28px; }
+  .summary .value.accent { color: var(--accent); }
+  .summary .value.warn { color: var(--error); }
+  .filename { color: var(--accent); font-size: 12px; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+  td.code { color: var(--accent); }
+  footer { margin-top: 32px; text-align: center; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<h1>工程表 <span class="accent">品番書き込み</span></h1>
+<p class="subtitle">ハウステック納入工程表の資材コードから品名マスタを参照し、品番を書き込みます</p>
+
+<div class="panel">
+  <h2>Master Status</h2>
+  <div class="status-row">
+    <div class="dot" id="masterDot"></div>
+    <span id="masterStatus">品名マスタ読み込み中...</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>工程表ファイル</h2>
+  <label class="drop-zone" id="dropZone">
+    <div class="big">クリック or ドロップ</div>
+    <div class="small">.xls / .xlsx 対応</div>
+    <input type="file" id="fileInput" accept=".xls,.xlsx">
+  </label>
+  <div class="filename" id="filename"></div>
+  <div class="actions">
+    <button class="primary" id="processBtn" disabled>品番を書き込んでダウンロード</button>
+    <button id="resetBtn">リセット</button>
+  </div>
+</div>
+
+<div class="panel" id="resultPanel" style="display:none;">
+  <h2>Result</h2>
+  <div class="summary">
+    <div class="card"><div class="label">検出</div><div class="value" id="totalCount">0</div></div>
+    <div class="card"><div class="label">書き込み</div><div class="value accent" id="updatedCount">0</div></div>
+    <div class="card"><div class="label">未登録</div><div class="value warn" id="notFoundCount">0</div></div>
+  </div>
+  <div id="notFoundTable"></div>
+  <div class="log" id="log"></div>
+</div>
+
+<footer>built for 北浦工業 / works with hinmei_master.xlsx</footer>
+
+<script>
+const MASTER_URL = 'hinmei_master.xlsx'; // 同階層配置想定
+let masterMap = null;
+let currentFile = null;
+
+const $ = id => document.getElementById(id);
+const log = (msg, cls = '') => {
+  const el = $('log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+};
+
+// --- マスタ読み込み ---
+async function loadMaster() {
+  try {
+    const res = await fetch(MASTER_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    masterMap = new Map();
+    for (const r of rows) {
+      const code = String(r['資材コード'] ?? '').trim();
+      const hinban = String(r['品番'] ?? '').trim();
+      if (code && hinban) masterMap.set(code, hinban);
+    }
+    $('masterDot').classList.add('ok');
+    $('masterStatus').textContent = `品名マスタ: ${masterMap.size}件 読み込み完了`;
+  } catch (e) {
+    $('masterDot').classList.add('err');
+    $('masterStatus').textContent = `品名マスタ読み込み失敗: ${e.message} (hinmei_master.xlsx を同じフォルダに配置してください)`;
+  }
+}
+
+// --- ドラッグ&ドロップ ---
+const dz = $('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+$('fileInput').addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  const lower = file.name.toLowerCase();
+  if (!lower.endsWith('.xls') && !lower.endsWith('.xlsx')) {
+    alert('.xls または .xlsx ファイルを指定してください');
+    return;
+  }
+  currentFile = file;
+  $('filename').textContent = '▸ ' + file.name;
+  $('processBtn').disabled = !masterMap;
+}
+
+// --- リセット ---
+$('resetBtn').addEventListener('click', () => {
+  currentFile = null;
+  $('filename').textContent = '';
+  $('fileInput').value = '';
+  $('processBtn').disabled = true;
+  $('resultPanel').style.display = 'none';
+  $('log').innerHTML = '';
+  $('notFoundTable').innerHTML = '';
+});
+
+// --- 処理本体 ---
+$('processBtn').addEventListener('click', async () => {
+  if (!currentFile || !masterMap) return;
+  $('resultPanel').style.display = 'block';
+  $('log').innerHTML = '';
+  $('notFoundTable').innerHTML = '';
+  log('処理開始...', 'info');
+
+  try {
+    const buf = await currentFile.arrayBuffer();
+    // cellStyles:true で可能な範囲の書式を保持
+    const wb = XLSX.read(buf, { type: 'array', cellStyles: true, cellNF: true, cellDates: true });
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    log(`シート: ${sheetName}`, 'info');
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    let total = 0, updated = 0;
+    const notFound = [];
+
+    // C列 = col index 2, B列 = col index 1
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const cAddr = XLSX.utils.encode_cell({ r, c: 2 });
+      const cell = ws[cAddr];
+      if (!cell || cell.v == null) continue;
+      const code = String(cell.v).trim();
+      if (!code || code === '資材コード' || code.length < 3) continue;
+      total++;
+
+      const targetAddr = XLSX.utils.encode_cell({ r: r - 1, c: 1 });
+      const oldCell = ws[targetAddr];
+      const oldVal = oldCell ? oldCell.v : '';
+
+      if (masterMap.has(code)) {
+        const hinban = masterMap.get(code);
+        // 既存セルがあればそれを書き換え（書式維持）、なければ新規
+        if (oldCell) {
+          oldCell.v = hinban;
+          oldCell.t = 's';
+          delete oldCell.w; // キャッシュ済み表示値をクリア
+          delete oldCell.f; // 数式があれば除去
+        } else {
+          ws[targetAddr] = { t: 's', v: hinban };
+        }
+        updated++;
+        log(`  ${code}: ${oldVal} → ${hinban}`, 'ok');
+      } else {
+        notFound.push({ code, oldVal, row: r + 1 });
+        log(`  ${code}: マスタ未登録 (既存: ${oldVal})`, 'err');
+      }
+    }
+
+    $('totalCount').textContent = total;
+    $('updatedCount').textContent = updated;
+    $('notFoundCount').textContent = notFound.length;
+
+    if (notFound.length) {
+      let html = '<table><thead><tr><th>資材コード</th><th>既存品名</th><th>行</th></tr></thead><tbody>';
+      for (const nf of notFound) {
+        html += `<tr><td class="code">${nf.code}</td><td>${nf.oldVal}</td><td>${nf.row}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      $('notFoundTable').innerHTML = html;
+    }
+
+    // 出力ファイル名
+    const origName = currentFile.name.replace(/\.(xls|xlsx)$/i, '');
+    const outName = `${origName}_品番入り.xlsx`;
+
+    // 書き出し（xlsx強制）
+    XLSX.writeFile(wb, outName, { bookType: 'xlsx', cellStyles: true });
+    log(`\n✓ ${outName} をダウンロードしました`, 'ok');
+
+  } catch (e) {
+    log(`✗ エラー: ${e.message}`, 'err');
+    console.error(e);
+  }
+});
+
+loadMaster();
+</script>
+
+</body>
+</html>
