@@ -165,7 +165,7 @@ async function loadMaster(){
   const dot=document.getElementById('masterDot');
   const text=document.getElementById('masterText');
   try{
-    const res=await fetch('./hinmei_master.xlsx',{cache:'no-cache'});
+    const res=await fetch('./hinmei_master.xlsx?v='+Date.now());
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf=await res.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
