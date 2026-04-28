@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旭化成住工 納品書作成ツール</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --surface: #ffffff;
+    --ink: #1f1b16;
+    --ink-soft: #5a5148;
+    --line: #d9d4c9;
+    --accent: #8b3a2f;
+    --accent-soft: #f4ebe5;
+    --ok: #2f6b4a;
+    --err: #8b2620;
+    --shadow: 0 1px 3px rgba(31,27,22,0.06), 0 4px 12px rgba(31,27,22,0.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 60px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header {
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 16px;
+    margin-bottom: 28px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.02em; font-weight: 600; }
+  .subtitle { color: var(--ink-soft); font-size: 12px; font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .step-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 50%; font-size: 12px; font-weight: 600; flex-shrink: 0;
+  }
+  .step-title { font-size: 15px; font-weight: 600; }
+  .step-desc { color: var(--ink-soft); font-size: 12px; margin-left: auto; }
+  .drop {
+    border: 2px dashed var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: #fafaf7;
+    display: block;
+  }
+  .drop:hover, .drop.dragover { border-color: var(--accent); background: var(--accent-soft); }
+  .drop.loaded { border-style: solid; border-color: var(--ok); background: #f1f7f3; }
+  .drop-label { font-size: 13px; color: var(--ink-soft); }
+  .drop-file {
+    margin-top: 8px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px; color: var(--ink); word-break: break-all;
+  }
+  .drop input[type=file] { display: none; }
+  .preview { margin-top: 14px; font-size: 12px; }
+  .preview-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px 20px;
+    padding: 12px 14px;
+    background: #fafaf7;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 12px;
+  }
+  .preview-meta dt { font-size: 10px; color: var(--ink-soft); letter-spacing: 0.08em; margin-bottom: 2px; }
+  .preview-meta dd { margin: 0; font-weight: 600; font-family: ui-monospace, monospace; font-size: 13px; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.items th, table.items td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  table.items th {
+    background: #f0ece3; font-weight: 600; font-size: 11px;
+    color: var(--ink-soft); letter-spacing: 0.04em;
+    position: sticky; top: 0;
+  }
+  table.items td.num { text-align: right; font-family: ui-monospace, monospace; }
+  table.items td.code { font-family: ui-monospace, monospace; font-weight: 600; }
+  .items-wrap { max-height: 280px; overflow-y: auto; border: 1px solid var(--line); border-radius: 3px; }
+  .chunk-divider td {
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 600; font-size: 11px;
+    padding: 4px 8px; letter-spacing: 0.04em;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 20px;
+    background: var(--ink); color: var(--bg);
+    border: none; border-radius: 3px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+    transition: background 0.15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--accent); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn.secondary:hover:not(:disabled) { background: var(--surface); border-color: var(--ink); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .status { margin-left: auto; font-size: 12px; color: var(--ink-soft); }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  .output-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .output-item {
+    display: flex; align-items: center;
+    padding: 10px 12px;
+    background: #fafaf7;
+    border: 1px solid var(--line);
+    border-radius: 3px; gap: 12px;
+  }
+  .output-item .name { font-family: ui-monospace, monospace; font-size: 12px; flex: 1; word-break: break-all; }
+  .output-item .meta { font-size: 11px; color: var(--ink-soft); flex-shrink: 0; }
+  .output-item a {
+    color: var(--accent); text-decoration: none;
+    font-size: 12px; font-weight: 600;
+    padding: 4px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 3px; flex-shrink: 0;
+  }
+  .output-item a:hover { background: var(--accent); color: var(--bg); }
+  .hint {
+    font-size: 11px; color: var(--ink-soft);
+    padding: 8px 12px;
+    background: #f0ece3;
+    border-left: 3px solid var(--accent);
+    margin-top: 10px; border-radius: 2px; line-height: 1.55;
+  }
+  .err-msg {
+    color: var(--err); font-size: 12px;
+    padding: 10px 12px;
+    background: #faf1f0;
+    border-left: 3px solid var(--err);
+    border-radius: 2px; margin-top: 10px;
+  }
+  footer {
+    margin-top: 40px; padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--ink-soft);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>旭化成住工 納品書作成ツール</h1>
+  <div class="subtitle">template.xlsx + source.xlsx → split by 20 rows → delivery notes</div>
+</header>
+
+<div class="step">
+  <div class="step-head">
+    <span class="step-num">1</span>
+    <span class="step-title">テンプレート</span>
+    <span class="step-desc">原本(旭化成住工納品書_1215-1-mm-dd-aa.xlsx)</span>
+  </div>
+  <label class="drop" id="dropTemplate">
+    <input type="file" id="fileTemplate" accept=".xlsx">
+    <div class="drop-label">ファイルをドロップまたはクリックで選択</div>
+    <div class="drop-file" id="fileTemplateName"></div>
+  </label>
+</div>
+
+<div class="step">
+  <div class="step-head">
+    <span class="step-num">2</span>
+    <span class="step-title">参照元データ</span>
+    <span class="step-desc">例: 2026年04月27日_滋賀.xlsx</span>
+  </div>
+  <label class="drop" id="dropSource">
+    <input type="file" id="fileSource" accept=".xlsx">
+    <div class="drop-label">ファイルをドロップまたはクリックで選択</div>
+    <div class="drop-file" id="fileSourceName"></div>
+  </label>
+  <div id="preview" class="preview" style="display:none;">
+    <dl class="preview-meta">
+      <div><dt>厚木納入日</dt><dd id="metaDate">-</dd></div>
+      <div><dt>データ件数</dt><dd id="metaCount">-</dd></div>
+      <div><dt>分割後 枚数</dt><dd id="metaSheets">-</dd></div>
+    </dl>
+    <div class="items-wrap">
+      <table class="items" id="itemsTable">
+        <thead><tr><th style="width:40px">#</th><th>コード№</th><th style="width:80px;text-align:right">数量</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="srcError"></div>
+</div>
+
+<div class="step">
+  <div class="step-head">
+    <span class="step-num">3</span>
+    <span class="step-title">納品書を生成</span>
+    <span class="step-desc">20件ごとに自動分割</span>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btnGenerate" disabled>納品書を生成</button>
+    <button class="btn secondary" id="btnZip" disabled>全件ZIPでDL</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="output-list" id="outputList"></div>
+  <div class="hint">
+    テンプレートxlsxのzip内部を直接編集するため、書式・数式・罫線は完全に保持されます。<br>
+    書き換えるのは <strong>D5(納品日)</strong>・<strong>C15〜C34(コード№)</strong>・<strong>E15〜E34(数量)</strong> のみ。部材名・単価・金額・合計はテンプレの数式で自動計算されます。
+  </div>
+</div>
+
+<footer>
+  Built for 唯人さん · runs fully in browser · no upload
+</footer>
+
+</div>
+
+<script>
+const state = {
+  templateBuffer: null,
+  templateName: null,
+  sourceData: null,
+  outputs: []
+};
+
+function setupDrop(dropEl, inputEl, onLoad) {
+  dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('dragover'); });
+  dropEl.addEventListener('dragleave', () => dropEl.classList.remove('dragover'));
+  dropEl.addEventListener('drop', e => {
+    e.preventDefault();
+    dropEl.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  inputEl.addEventListener('change', e => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+  function handleFile(file) {
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      alert('xlsxファイルを選択してください');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => onLoad(e.target.result, file.name, dropEl);
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+setupDrop(
+  document.getElementById('dropTemplate'),
+  document.getElementById('fileTemplate'),
+  (buffer, name, dropEl) => {
+    state.templateBuffer = buffer;
+    state.templateName = name;
+    document.getElementById('fileTemplateName').textContent = '✓ ' + name;
+    dropEl.classList.add('loaded');
+    checkReady();
+  }
+);
+
+setupDrop(
+  document.getElementById('dropSource'),
+  document.getElementById('fileSource'),
+  (buffer, name, dropEl) => {
+    document.getElementById('fileSourceName').textContent = name;
+    document.getElementById('srcError').innerHTML = '';
+    try {
+      const parsed = parseSourceXlsx(buffer);
+      state.sourceData = parsed;
+      document.getElementById('fileSourceName').textContent = '✓ ' + name;
+      dropEl.classList.add('loaded');
+      showPreview(parsed);
+      checkReady();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('srcError').innerHTML =
+        '<div class="err-msg">読み込みエラー: ' + err.message + '</div>';
+      dropEl.classList.remove('loaded');
+      state.sourceData = null;
+      document.getElementById('preview').style.display = 'none';
+      checkReady();
+    }
+  }
+);
+
+function parseSourceXlsx(buffer) {
+  const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  if (!ws) throw new Error('シートが読み込めません');
+
+  let atsugiDate = null;
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+  for (let r = range.s.r; r <= range.e.r && !atsugiDate; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const ref = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[ref];
+      if (!cell || cell.v === undefined || cell.v === null) continue;
+      const v = cell.v;
+      if (typeof v === 'string' && v.indexOf('厚木納入日') !== -1) {
+        const fRef = XLSX.utils.encode_cell({ r, c: 5 });
+        const fCell = ws[fRef];
+        if (fCell) {
+          if (fCell.v instanceof Date) {
+            atsugiDate = fCell.v;
+          } else if (typeof fCell.v === 'number' && fCell.v > 40000) {
+            atsugiDate = excelSerialToDate(fCell.v);
+          }
+        }
+        break;
+      }
+    }
+  }
+  if (!atsugiDate) throw new Error('厚木納入日が見つかりません(F列の日付セル)');
+
+  const items = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const cRef = XLSX.utils.encode_cell({ r, c: 2 });
+    const eRef = XLSX.utils.encode_cell({ r, c: 4 });
+    const gRef = XLSX.utils.encode_cell({ r, c: 6 });
+    const cCell = ws[cRef];
+    const eCell = ws[eRef];
+    const gCell = ws[gRef];
+    if (!cCell || typeof cCell.v !== 'number' || !Number.isInteger(cCell.v)) continue;
+    if (!eCell || eCell.v === undefined || eCell.v === null || eCell.v === '') continue;
+    if (!gCell || gCell.v === undefined || gCell.v === null || gCell.v === '') continue;
+    const code = String(eCell.v).trim();
+    const qty = gCell.v;
+    if (code) items.push({ code, qty });
+  }
+  if (items.length === 0) throw new Error('データが見つかりません');
+
+  return { date: atsugiDate, items };
+}
+
+function excelSerialToDate(serial) {
+  const ms = (serial - 25569) * 86400 * 1000;
+  return new Date(ms);
+}
+
+function showPreview(data) {
+  document.getElementById('preview').style.display = 'block';
+  const d = data.date;
+  const dateStr = d.getFullYear() + '/' +
+    String(d.getMonth()+1).padStart(2,'0') + '/' +
+    String(d.getDate()).padStart(2,'0');
+  document.getElementById('metaDate').textContent = dateStr;
+  document.getElementById('metaCount').textContent = data.items.length + ' 件';
+  const sheets = Math.ceil(data.items.length / 20);
+  document.getElementById('metaSheets').textContent = sheets + ' 枚';
+
+  const tbody = document.querySelector('#itemsTable tbody');
+  tbody.innerHTML = '';
+  data.items.forEach((item, i) => {
+    if (i > 0 && i % 20 === 0) {
+      const divRow = tbody.insertRow();
+      const divCell = divRow.insertCell();
+      divCell.colSpan = 3;
+      divCell.textContent = '── 納品書 ' + (Math.floor(i/20)+1) + ' 枚目 ──';
+      divRow.className = 'chunk-divider';
+    }
+    const tr = tbody.insertRow();
+    tr.insertCell().textContent = i + 1;
+    const c2 = tr.insertCell(); c2.textContent = item.code; c2.className = 'code';
+    const c3 = tr.insertCell();
+    c3.textContent = typeof item.qty === 'number' ? item.qty.toLocaleString() : item.qty;
+    c3.className = 'num';
+  });
+}
+
+function checkReady() {
+  document.getElementById('btnGenerate').disabled = !(state.templateBuffer && state.sourceData);
+}
+
+document.getElementById('btnGenerate').addEventListener('click', () => {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = '生成中...';
+  statusEl.className = 'status';
+
+  try {
+    state.outputs = [];
+    const items = state.sourceData.items;
+    const date = state.sourceData.date;
+    const chunks = [];
+    for (let i = 0; i < items.length; i += 20) {
+      chunks.push(items.slice(i, i + 20));
+    }
+
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+
+    for (let idx = 0; idx < chunks.length; idx++) {
+      const chunk = chunks[idx];
+      const filename = '旭化成住工納品書_1215-1-' + mm + '-' + dd + '-' + (idx+1) + '.xlsx';
+      const blob = buildDeliveryXlsx(state.templateBuffer, date, chunk);
+      state.outputs.push({ name: filename, blob, count: chunk.length });
+    }
+
+    renderOutputs();
+    document.getElementById('btnZip').disabled = false;
+    statusEl.textContent = '✓ ' + chunks.length + '枚 生成完了';
+    statusEl.className = 'status ok';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'エラー: ' + err.message;
+    statusEl.className = 'status err';
+  }
+});
+
+function buildDeliveryXlsx(templateBuffer, date, chunk) {
+  const zip = fflate.unzipSync(new Uint8Array(templateBuffer));
+
+  const sstPath = 'xl/sharedStrings.xml';
+  if (!zip[sstPath]) throw new Error('テンプレートにsharedStrings.xmlが存在しません');
+  let sstXml = new TextDecoder().decode(zip[sstPath]);
+
+  const existingSi = (sstXml.match(/<si[^>]*>[\s\S]*?<\/si>/g) || []).length;
+
+  let appendSi = '';
+  const codeIndexes = [];
+  for (let i = 0; i < chunk.length; i++) {
+    codeIndexes.push(existingSi + i);
+    appendSi += '<si><t xml:space="preserve">' + escapeXml(String(chunk[i].code)) + '</t></si>';
+  }
+
+  sstXml = sstXml.replace('</sst>', appendSi + '</sst>');
+
+  sstXml = sstXml.replace(/<sst([^>]*)>/, (match, attrs) => {
+    let newAttrs = attrs;
+    if (/count="\d+"/.test(newAttrs)) {
+      newAttrs = newAttrs.replace(/count="(\d+)"/, (m, v) => 'count="' + (parseInt(v,10) + chunk.length) + '"');
+    }
+    if (/uniqueCount="\d+"/.test(newAttrs)) {
+      newAttrs = newAttrs.replace(/uniqueCount="(\d+)"/, (m, v) => 'uniqueCount="' + (parseInt(v,10) + chunk.length) + '"');
+    }
+    return '<sst' + newAttrs + '>';
+  });
+  zip[sstPath] = fflate.strToU8(sstXml);
+
+  const sheetPath = 'xl/worksheets/sheet1.xml';
+  let sheetXml = new TextDecoder().decode(zip[sheetPath]);
+
+  const dateSerial = dateToExcelSerial(date);
+  sheetXml = upsertCellValue(sheetXml, 'D5', '<v>' + dateSerial + '</v>', null);
+
+  for (let i = 0; i < 20; i++) {
+    const row = 15 + i;
+    const cRef = 'C' + row;
+    const eRef = 'E' + row;
+
+    if (i < chunk.length) {
+      sheetXml = upsertCellValue(sheetXml, cRef, '<v>' + codeIndexes[i] + '</v>', 's');
+      sheetXml = upsertCellValue(sheetXml, eRef, '<v>' + chunk[i].qty + '</v>', null);
+    } else {
+      sheetXml = clearCellValue(sheetXml, cRef);
+      sheetXml = clearCellValue(sheetXml, eRef);
+    }
+  }
+
+  zip[sheetPath] = fflate.strToU8(sheetXml);
+
+  delete zip['xl/calcChain.xml'];
+
+  let wbContent = new TextDecoder().decode(zip['xl/workbook.xml']);
+  if (/<calcPr[^/>]*\/>/.test(wbContent)) {
+    wbContent = wbContent.replace(/<calcPr([^/>]*)\/>/, (m, attrs) => {
+      if (attrs.indexOf('fullCalcOnLoad') !== -1) return m;
+      return '<calcPr' + attrs + ' fullCalcOnLoad="1"/>';
+    });
+  } else if (/<calcPr[^>]*>/.test(wbContent)) {
+    wbContent = wbContent.replace(/<calcPr([^>]*)>/, (m, attrs) => {
+      if (attrs.indexOf('fullCalcOnLoad') !== -1) return m;
+      return '<calcPr' + attrs + ' fullCalcOnLoad="1">';
+    });
+  } else {
+    wbContent = wbContent.replace('</workbook>', '<calcPr fullCalcOnLoad="1"/></workbook>');
+  }
+  zip['xl/workbook.xml'] = fflate.strToU8(wbContent);
+
+  const zipped = fflate.zipSync(zip);
+  return new Blob([zipped], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+function escapeXml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function dateToExcelSerial(date) {
+  const utcDay = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.floor(utcDay / 86400000) + 25569;
+}
+
+function upsertCellValue(xml, cellRef, newInner, type) {
+  // self-closing を先に判定(<c r="X" .../>)
+  // [^>]*だと次の<までの長さが曖昧なので、/>で確実に終端する
+  const selfRe = new RegExp('<c\\s+r="' + cellRef + '"((?:[^/>]|/(?!>))*)/>', 'g');
+  // paired: 内部に<cタグを含まない(他セルに食い込まない)
+  const pairedRe = new RegExp('<c\\s+r="' + cellRef + '"([^>]*)>((?:(?!<c\\s+r=)[\\s\\S])*?)<\\/c>', 'g');
+
+  const rebuildAttrs = (origAttrs) => {
+    let cleaned = origAttrs.replace(/\s+t="[^"]*"/g, '');
+    if (type) cleaned += ' t="' + type + '"';
+    return cleaned;
+  };
+
+  let replaced = false;
+  const newXmlSelf = xml.replace(selfRe, (match, attrs) => {
+    replaced = true;
+    return '<c r="' + cellRef + '"' + rebuildAttrs(attrs) + '>' + newInner + '</c>';
+  });
+  if (replaced) return newXmlSelf;
+
+  const newXmlPaired = xml.replace(pairedRe, (match, attrs) => {
+    replaced = true;
+    return '<c r="' + cellRef + '"' + rebuildAttrs(attrs) + '>' + newInner + '</c>';
+  });
+  if (replaced) return newXmlPaired;
+
+  console.warn('セル ' + cellRef + ' が見つかりません');
+  return xml;
+}
+
+function clearCellValue(xml, cellRef) {
+  // self-closing → そのまま(変更不要)
+  const selfRe = new RegExp('<c\\s+r="' + cellRef + '"((?:[^/>]|/(?!>))*)/>', 'g');
+  if (selfRe.test(xml)) return xml; // 既に空
+
+  // paired: 内部に<cを含まない形で
+  const pairedRe = new RegExp('<c\\s+r="' + cellRef + '"([^>]*)>((?:(?!<c\\s+r=)[\\s\\S])*?)<\\/c>', 'g');
+  let matched = false;
+  const newXml = xml.replace(pairedRe, (match, attrs, inner) => {
+    matched = true;
+    const cleanedAttrs = attrs.replace(/\s+t="[^"]*"/g, '');
+    const fMatch = inner.match(/<f[^>]*>[\s\S]*?<\/f>|<f[^/>]*\/>/);
+    if (fMatch) {
+      return '<c r="' + cellRef + '"' + cleanedAttrs + '>' + fMatch[0] + '</c>';
+    } else {
+      return '<c r="' + cellRef + '"' + cleanedAttrs + '/>';
+    }
+  });
+  if (matched) return newXml;
+  return xml;
+}
+
+function renderOutputs() {
+  const listEl = document.getElementById('outputList');
+  listEl.innerHTML = '';
+  state.outputs.forEach(out => {
+    const div = document.createElement('div');
+    div.className = 'output-item';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'name';
+    nameSpan.textContent = out.name;
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'meta';
+    metaSpan.textContent = out.count + '件';
+    const a = document.createElement('a');
+    a.href = '#';
+    a.textContent = 'ダウンロード';
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      downloadBlob(out.blob, out.name);
+    });
+    div.appendChild(nameSpan);
+    div.appendChild(metaSpan);
+    div.appendChild(a);
+    listEl.appendChild(div);
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById('btnZip').addEventListener('click', async () => {
+  if (!state.outputs.length) return;
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'ZIP作成中...';
+  statusEl.className = 'status';
+
+  try {
+    const zipInput = {};
+    for (const out of state.outputs) {
+      const buf = await out.blob.arrayBuffer();
+      zipInput[out.name] = new Uint8Array(buf);
+    }
+    const zipped = fflate.zipSync(zipInput);
+    const blob = new Blob([zipped], { type: 'application/zip' });
+    const d = state.sourceData.date;
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    downloadBlob(blob, '旭化成住工納品書_' + mm + dd + '_一式.zip');
+    statusEl.textContent = '✓ ZIP DL完了';
+    statusEl.className = 'status ok';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'エラー: ' + err.message;
+    statusEl.className = 'status err';
+  }
+});
+</script>
+</body>
+</html>
