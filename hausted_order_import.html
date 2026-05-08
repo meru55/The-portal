@@ -85,7 +85,7 @@ td input.filled{border-color:var(--success);}
 <div class="card" style="animation-delay:0.05s">
   <div class="section-label">マスター参照状況</div>
   <div class="status-row">
-    <div class="status-pill loading" id="pillParts"><div class="dot"></div><span id="textParts">品番対応表 読込中...</span></div>
+    <div class="status-pill loading" id="pillParts"><div class="dot"></div><span id="textParts">品名対応表 読込中...</span></div>
     <div class="status-pill loading" id="pillGroups"><div class="dot"></div><span id="textGroups">グループ定義 読込中...</span></div>
     <div class="status-pill" id="pillCal"><div class="dot"></div><span id="textCal">カレンダー (工程表アップ後)</span></div>
   </div>
@@ -140,12 +140,12 @@ td input.filled{border-color:var(--success);}
 <script>
 const TOKUISAKI = '000440';
 const NYUSAKI   = '004440';
-const PARTS_URL = './parts_master.xlsx';
+const PARTS_URL = './hinmei_master.xlsx'; // 変更: parts_master.xlsx -> hinmei_master.xlsx
 const GROUPS_URL = './groups.xlsx';
-const CAL_BASE  = './calendar/';
+const CAL_BASE  = './'; // 変更: ./calendar/ -> ./ (同階層)
 
 let partsMap = {};
-let groupsMap = {};   // { 資材コード: グループ名 }
+let groupsMap = {};
 let calendar = {};
 let parsedRows = [];
 
@@ -186,7 +186,7 @@ function clearWarn(){
 }
 
 async function loadPartsMaster(){
-  setPill('pillParts','loading','品番対応表 読込中...');
+  setPill('pillParts','loading','品名対応表 読込中...');
   try{
     const res=await fetch(PARTS_URL+'?t='+Date.now());
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -201,10 +201,10 @@ async function loadPartsMaster(){
       const b=String(rows[i][1]||'').trim();
       if(a){partsMap[a]=b;count++;}
     }
-    setPill('pillParts','ok',`品番対応表 ${count}件`);
+    setPill('pillParts','ok',`品名対応表 ${count}件`);
   }catch(err){
-    setPill('pillParts','warn','品番対応表 未取得 (手動入力要)');
-    showWarn(`品番対応表が読み込めませんでした (${err.message})。社内品番は手動入力してください。`);
+    setPill('pillParts','warn','品名対応表 未取得');
+    showWarn(`<strong>hinmei_master.xlsx</strong> が読み込めませんでした。社内品番は手動入力が必要です。`);
   }
 }
 
@@ -222,16 +222,15 @@ async function loadGroupsMaster(){
     for(let i=1;i<rows.length;i++){
       const groupName=String(rows[i][0]||'').trim();
       const shizai=String(rows[i][1]||'').trim();
-      // 資材コードがあれば登録(グループ名は空欄でも可、空欄なら単独扱い)
       if(shizai){
-        groupsMap[shizai]=groupName; // 空欄ならそのまま空文字を保持
+        groupsMap[shizai]=groupName;
         count++;
       }
     }
     setPill('pillGroups','ok',`グループ定義 ${count}件`);
   }catch(err){
     setPill('pillGroups','warn','グループ定義 未取得');
-    showWarn(`グループ定義(groups.xlsx)が読み込めませんでした (${err.message})。グループ別Excel出力は使えません。`);
+    showWarn(`<strong>groups.xlsx</strong> が読み込めませんでした。グループ別Excel出力は使えません。`);
   }
 }
 
@@ -239,6 +238,7 @@ async function loadCalendar(year, month){
   const fname=`haustec_${year}${String(month).padStart(2,'0')}.xlsx`;
   setPill('pillCal','loading',`${fname} 読込中...`);
   try{
+    // 同階層(CAL_BASE='./')から取得
     const res=await fetch(CAL_BASE+encodeURIComponent(fname)+'?t='+Date.now());
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf=await res.arrayBuffer();
@@ -250,9 +250,6 @@ async function loadCalendar(year, month){
     for(let i=1;i<rows.length;i++){
       const r=rows[i]||[];
       if(!r[0]) continue;
-      // A列=納期(検索キー、工程表の日付と照合する)
-      // B列=納入日(CSVの納期列に入れる値)
-      // C列=出荷予定日(CSVの出荷予定日列に入れる値)
       const key=fmt8(r[0]);
       const noki=fmt8(r[1]);
       const shukka=fmt8(r[2]);
@@ -266,7 +263,7 @@ async function loadCalendar(year, month){
   }catch(err){
     calendar={};
     setPill('pillCal','warn',`${fname} 未取得`);
-    showWarn(`<strong>${fname}</strong> が見つかりません。納期・出荷予定日は全行手動入力してください。`);
+    showWarn(`カレンダー <strong>${fname}</strong> が見つかりません。納期・出荷予定日は手動入力してください。`);
   }
 }
 
@@ -387,55 +384,50 @@ function renderTable(){
   tbody.innerHTML='';
   const today=todayYMD();
   
-  // 各行の前処理(カレンダー・品番マップ・グループ名を埋める)
   parsedRows.forEach(r=>{
     const cal=calendar[r.chaku]||{};
     if(!r.noki) r.noki=cal.noki||'';
     if(!r.shukka) r.shukka=cal.shukka||'';
     if(r.pn===undefined) r.pn=partsMap[r.shizai]||'';
-    // _origIdx は CSV/ZIP出力時に元順を保つため記録(初回のみ)
     if(r._origIdx===undefined) r._origIdx=parsedRows.indexOf(r);
   });
   
-  // 表示用ソート: 納入日 → グループ名 → 資材コード
-  // (parsedRows自体はソートしない。表示順だけ入れ替え)
   const indexed=parsedRows.map((r,i)=>({r,i}));
   indexed.sort((a,b)=>{
-    const ga=groupsMap[a.r.shizai]||''; // 単独は空文字
+    const ga=groupsMap[a.r.shizai]||'';
     const gb=groupsMap[b.r.shizai]||'';
-    // 納入日
-    if(a.r.chaku!==b.r.chaku) return a.r.chaku<b.r.chaku?-1:1;
-    // グループ名(空文字=単独は最後に)
+    const na=a.r.noki||'99999999';
+    const nb=b.r.noki||'99999999';
+    if(na!==nb) return na<nb?-1:1;
     if(ga!==gb){
       if(ga==='') return 1;
       if(gb==='') return -1;
       return ga<gb?-1:1;
     }
-    // 資材コード
     return a.r.shizai<b.r.shizai?-1:1;
   });
   
-  let prevDate='';
+  let prevNoki='';
   let prevGroupKey='';
   let displayNum=0;
   
   indexed.forEach(({r,i})=>{
     displayNum++;
     const groupName=groupsMap[r.shizai];
-    const groupKey=`${r.chaku}__${groupName||r.shizai}`;
+    const groupKey=`${r.noki}__${groupName||r.shizai}`;
     
-    // 納入日が変わったら日付セパレータ行
-    if(r.chaku!==prevDate){
+    if(r.noki!==prevNoki){
       const sep=document.createElement('tr');
       sep.className='date-sep';
-      const y=r.chaku.substr(0,4), m=r.chaku.substr(4,2), d=r.chaku.substr(6,2);
-      sep.innerHTML=`<td colspan="10">▸ 納入日 ${y}/${m}/${d}</td>`;
+      const label=r.noki
+        ? `▸ 納期 ${r.noki.substr(0,4)}/${r.noki.substr(4,2)}/${r.noki.substr(6,2)}`
+        : '▸ 納期 未入力';
+      sep.innerHTML=`<td colspan="10">${label}</td>`;
       tbody.appendChild(sep);
-      prevDate=r.chaku;
-      prevGroupKey=''; // 日付変わったらグループキーもリセット
+      prevNoki=r.noki;
+      prevGroupKey='';
     }
     
-    // グループが変わったら細い区切り
     if(prevGroupKey && groupKey!==prevGroupKey){
       const gsep=document.createElement('tr');
       gsep.className='group-sep';
@@ -447,7 +439,6 @@ function renderTable(){
     const tr=document.createElement('tr');
     if(!r.noki||!r.shukka||!r.pn) tr.classList.add('warn-row');
     
-    // グループバッジ
     let badge;
     if(groupName===undefined){
       badge=`<span class="group-badge solo" style="border-color:rgba(255,71,87,0.4);color:var(--danger);">未登録</span>`;
@@ -506,8 +497,6 @@ function updateStats(){
   document.getElementById('sFilled').textContent=filled;
   document.getElementById('sUnfilled').textContent=incomplete;
   
-  // 生成ファイル数 = ユニーク(納期 × グループ名)の数
-  // ※ グループ未登録(undefined)の行は除外
   const fileKeys=new Set();
   parsedRows.forEach(r=>{
     if(groupsMap[r.shizai]===undefined) return;
@@ -520,7 +509,6 @@ function updateStats(){
   const zipBtn=document.getElementById('zipBtn');
   const dlMsg=document.getElementById('dlMsg');
   
-  // CSV出力ボタン: 全件入力済みなら有効
   if(incomplete>0){
     dlBtn.disabled=true;
     const parts=[];
@@ -536,7 +524,6 @@ function updateStats(){
     dlMsg.className='msg ok';
   }
   
-  // ZIP出力ボタン: 全件入力済 AND 全資材コードがgroupsMapに登録済みなら有効
   if(incomplete>0){
     zipBtn.disabled=true;
   }else{
@@ -577,8 +564,6 @@ async function downloadGroupedZip(){
   const today=todayYMD();
   const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','備考','客先発注番号'];
   
-  // (納期 × グループ名) ごとに明細をまとめる
-  // グループ名が空欄なら資材コード自身をグループ名として扱う(単独扱い)
   const buckets={};
   parsedRows.forEach(r=>{
     const groupName=groupsMap[r.shizai] || r.shizai;
@@ -596,14 +581,10 @@ async function downloadGroupedZip(){
   try{
     for(const key of Object.keys(buckets)){
       const {noki, rows}=buckets[key];
-      
-      // ファイル名: 納期_注番1_注番2_...xlsx
       const jbans=rows.map(r=>r.jban).filter(Boolean);
-      // 重複除去 + ソート
       const uniqJbans=[...new Set(jbans)].sort();
       const fname=`${noki}_${uniqJbans.join('_')}.xlsx`;
       
-      // Excelシート生成
       const aoa=[hdr];
       rows.forEach(r=>{
         aoa.push(['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'',r.jban]);
