@@ -44,6 +44,10 @@ th{background:var(--surface2);font-family:'Syne',sans-serif;font-weight:700;font
 td{padding:5px 8px;border-bottom:1px solid rgba(42,42,53,0.6);color:var(--text);white-space:nowrap;vertical-align:middle;}
 tr:hover td{background:var(--surface2);}
 tr.warn-row td{background:rgba(255,71,87,0.04);}
+tr.date-sep td{background:linear-gradient(90deg,rgba(232,255,71,0.06),transparent);font-family:'Syne',sans-serif;font-weight:700;font-size:0.7rem;color:var(--accent);letter-spacing:0.08em;padding:8px 8px 6px;border-bottom:1px solid rgba(232,255,71,0.2);border-top:1px solid rgba(232,255,71,0.15);}
+tr.group-sep td{padding:0;border-bottom:1px dashed rgba(71,255,232,0.15);}
+.group-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.65rem;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.04em;background:rgba(71,255,232,0.08);color:var(--accent2);border:1px solid rgba(71,255,232,0.25);}
+.group-badge.solo{background:transparent;color:var(--muted);border-color:var(--border);font-weight:400;font-style:italic;}
 td input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:3px 6px;width:100%;outline:none;transition:border-color 0.2s;}
 td input:focus{border-color:var(--accent2);}
 td input.unfilled{border-color:var(--danger);background:rgba(255,71,87,0.08);}
@@ -104,6 +108,7 @@ td input.filled{border-color:var(--success);}
     <div class="stat"><div class="stat-num ok" id="sMatched">0</div><div class="stat-label">品番照合</div></div>
     <div class="stat"><div class="stat-num ok" id="sFilled">0</div><div class="stat-label">日付入力</div></div>
     <div class="stat"><div class="stat-num warn" id="sUnfilled">0</div><div class="stat-label">未完成</div></div>
+    <div class="stat"><div class="stat-num" id="sFiles">0</div><div class="stat-label">生成ファイル</div></div>
   </div>
   <div class="table-wrap">
     <table>
@@ -112,6 +117,7 @@ td input.filled{border-color:var(--success);}
           <th style="width:22px">#</th>
           <th style="width:78px">受注日</th>
           <th style="width:78px">納入日</th>
+          <th style="width:110px">グループ</th>
           <th style="width:90px">資材コード</th>
           <th style="width:130px">社内品番</th>
           <th style="width:50px">数量</th>
@@ -134,9 +140,9 @@ td input.filled{border-color:var(--success);}
 <script>
 const TOKUISAKI = '000440';
 const NYUSAKI   = '004440';
-const PARTS_URL = './hinmei_master.xlsx';
+const PARTS_URL = './parts_master.xlsx';
 const GROUPS_URL = './groups.xlsx';
-const CAL_BASE  = './';
+const CAL_BASE  = './calendar/';
 
 let partsMap = {};
 let groupsMap = {};   // { 資材コード: グループ名 }
@@ -238,7 +244,7 @@ async function loadCalendar(year, month){
     const buf=await res.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
     calendar={};
     let count=0;
     for(let i=1;i<rows.length;i++){
@@ -381,19 +387,81 @@ function renderTable(){
   tbody.innerHTML='';
   const today=todayYMD();
   
-  parsedRows.forEach((r,i)=>{
+  // 各行の前処理(カレンダー・品番マップ・グループ名を埋める)
+  parsedRows.forEach(r=>{
     const cal=calendar[r.chaku]||{};
     if(!r.noki) r.noki=cal.noki||'';
     if(!r.shukka) r.shukka=cal.shukka||'';
     if(r.pn===undefined) r.pn=partsMap[r.shizai]||'';
+    // _origIdx は CSV/ZIP出力時に元順を保つため記録(初回のみ)
+    if(r._origIdx===undefined) r._origIdx=parsedRows.indexOf(r);
+  });
+  
+  // 表示用ソート: 納入日 → グループ名 → 資材コード
+  // (parsedRows自体はソートしない。表示順だけ入れ替え)
+  const indexed=parsedRows.map((r,i)=>({r,i}));
+  indexed.sort((a,b)=>{
+    const ga=groupsMap[a.r.shizai]||''; // 単独は空文字
+    const gb=groupsMap[b.r.shizai]||'';
+    // 納入日
+    if(a.r.chaku!==b.r.chaku) return a.r.chaku<b.r.chaku?-1:1;
+    // グループ名(空文字=単独は最後に)
+    if(ga!==gb){
+      if(ga==='') return 1;
+      if(gb==='') return -1;
+      return ga<gb?-1:1;
+    }
+    // 資材コード
+    return a.r.shizai<b.r.shizai?-1:1;
+  });
+  
+  let prevDate='';
+  let prevGroupKey='';
+  let displayNum=0;
+  
+  indexed.forEach(({r,i})=>{
+    displayNum++;
+    const groupName=groupsMap[r.shizai];
+    const groupKey=`${r.chaku}__${groupName||r.shizai}`;
+    
+    // 納入日が変わったら日付セパレータ行
+    if(r.chaku!==prevDate){
+      const sep=document.createElement('tr');
+      sep.className='date-sep';
+      const y=r.chaku.substr(0,4), m=r.chaku.substr(4,2), d=r.chaku.substr(6,2);
+      sep.innerHTML=`<td colspan="10">▸ 納入日 ${y}/${m}/${d}</td>`;
+      tbody.appendChild(sep);
+      prevDate=r.chaku;
+      prevGroupKey=''; // 日付変わったらグループキーもリセット
+    }
+    
+    // グループが変わったら細い区切り
+    if(prevGroupKey && groupKey!==prevGroupKey){
+      const gsep=document.createElement('tr');
+      gsep.className='group-sep';
+      gsep.innerHTML='<td colspan="10"></td>';
+      tbody.appendChild(gsep);
+    }
+    prevGroupKey=groupKey;
     
     const tr=document.createElement('tr');
     if(!r.noki||!r.shukka||!r.pn) tr.classList.add('warn-row');
     
+    // グループバッジ
+    let badge;
+    if(groupName===undefined){
+      badge=`<span class="group-badge solo" style="border-color:rgba(255,71,87,0.4);color:var(--danger);">未登録</span>`;
+    }else if(groupName===''){
+      badge=`<span class="group-badge solo">単独</span>`;
+    }else{
+      badge=`<span class="group-badge">${groupName}</span>`;
+    }
+    
     tr.innerHTML=`
-      <td>${i+1}</td>
+      <td>${displayNum}</td>
       <td>${today}</td>
       <td>${r.chaku}</td>
+      <td>${badge}</td>
       <td>${r.shizai}</td>
       <td><input type="text" data-idx="${i}" data-field="pn" value="${r.pn}" placeholder="未照合" class="${r.pn?'filled':'unfilled'}"></td>
       <td>${r.qty}</td>
@@ -437,6 +505,16 @@ function updateStats(){
   document.getElementById('sMatched').textContent=matched;
   document.getElementById('sFilled').textContent=filled;
   document.getElementById('sUnfilled').textContent=incomplete;
+  
+  // 生成ファイル数 = ユニーク(納期 × グループ名)の数
+  // ※ グループ未登録(undefined)の行は除外
+  const fileKeys=new Set();
+  parsedRows.forEach(r=>{
+    if(groupsMap[r.shizai]===undefined) return;
+    const groupName=groupsMap[r.shizai] || r.shizai;
+    fileKeys.add(`${r.noki}__${groupName}`);
+  });
+  document.getElementById('sFiles').textContent=fileKeys.size;
   
   const dlBtn=document.getElementById('dlBtn');
   const zipBtn=document.getElementById('zipBtn');
