@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>工程表取込ハウステック</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
 :root{--bg:#0c0c0f;--surface:#141418;--surface2:#1c1c22;--border:#2a2a35;--accent:#e8ff47;--accent2:#47ffe8;--text:#f0f0f5;--muted:#6b6b80;--danger:#ff4757;--success:#4ade80;--radius:12px;}
@@ -53,6 +54,8 @@ td input.filled{border-color:var(--success);}
 .btn:disabled{opacity:0.35;cursor:not-allowed;}
 .btn-primary{background:var(--accent);color:var(--bg);border-color:var(--accent);}
 .btn-primary:hover:not(:disabled){background:#f0ff70;border-color:#f0ff70;transform:translateY(-1px);box-shadow:0 6px 20px rgba(232,255,71,0.2);}
+.btn-secondary{border-color:rgba(71,255,232,0.25);color:var(--accent2);background:rgba(71,255,232,0.05);}
+.btn-secondary:hover:not(:disabled){background:rgba(71,255,232,0.12);border-color:var(--accent2);transform:translateY(-1px);}
 .msg{font-size:0.7rem;color:var(--muted);}.msg.ok{color:var(--success);}.msg.err{color:var(--danger);}
 .badge{display:inline-block;font-size:0.6rem;padding:2px 7px;border-radius:4px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin-left:8px;}
 .badge-warn{background:rgba(255,71,87,0.15);color:var(--danger);border:1px solid rgba(255,71,87,0.3);}
@@ -79,6 +82,7 @@ td input.filled{border-color:var(--success);}
   <div class="section-label">マスター参照状況</div>
   <div class="status-row">
     <div class="status-pill loading" id="pillParts"><div class="dot"></div><span id="textParts">品番対応表 読込中...</span></div>
+    <div class="status-pill loading" id="pillGroups"><div class="dot"></div><span id="textGroups">グループ定義 読込中...</span></div>
     <div class="status-pill" id="pillCal"><div class="dot"></div><span id="textCal">カレンダー (工程表アップ後)</span></div>
   </div>
   <div class="alert alert-warn" id="alertBox"></div>
@@ -111,7 +115,7 @@ td input.filled{border-color:var(--success);}
           <th style="width:90px">資材コード</th>
           <th style="width:130px">社内品番</th>
           <th style="width:50px">数量</th>
-          <th style="width:100px">客先注番</th>
+          <th style="width:100px">客先発注番号</th>
           <th style="width:90px">納期</th>
           <th style="width:90px">出荷予定日</th>
         </tr>
@@ -121,6 +125,7 @@ td input.filled{border-color:var(--success);}
   </div>
   <div class="btn-row">
     <button class="btn btn-primary" id="dlBtn" onclick="downloadCSV()" disabled>↓ CSV ダウンロード</button>
+    <button class="btn btn-secondary" id="zipBtn" onclick="downloadGroupedZip()" disabled>↓ グループ別Excel(ZIP)</button>
     <span class="msg" id="dlMsg"></span>
   </div>
 </div>
@@ -129,10 +134,12 @@ td input.filled{border-color:var(--success);}
 <script>
 const TOKUISAKI = '000440';
 const NYUSAKI   = '004440';
-const PARTS_URL = './hinmei_master.xlsx';
-const CAL_BASE  = './';
+const PARTS_URL = './parts_master.xlsx';
+const GROUPS_URL = './groups.xlsx';
+const CAL_BASE  = './calendar/';
 
 let partsMap = {};
+let groupsMap = {};   // { 資材コード: グループ名 }
 let calendar = {};
 let parsedRows = [];
 
@@ -192,6 +199,33 @@ async function loadPartsMaster(){
   }catch(err){
     setPill('pillParts','warn','品番対応表 未取得 (手動入力要)');
     showWarn(`品番対応表が読み込めませんでした (${err.message})。社内品番は手動入力してください。`);
+  }
+}
+
+async function loadGroupsMaster(){
+  setPill('pillGroups','loading','グループ定義 読込中...');
+  try{
+    const res=await fetch(GROUPS_URL+'?t='+Date.now());
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf=await res.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    groupsMap={};
+    let count=0;
+    for(let i=1;i<rows.length;i++){
+      const groupName=String(rows[i][0]||'').trim();
+      const shizai=String(rows[i][1]||'').trim();
+      // 資材コードがあれば登録(グループ名は空欄でも可、空欄なら単独扱い)
+      if(shizai){
+        groupsMap[shizai]=groupName; // 空欄ならそのまま空文字を保持
+        count++;
+      }
+    }
+    setPill('pillGroups','ok',`グループ定義 ${count}件`);
+  }catch(err){
+    setPill('pillGroups','warn','グループ定義 未取得');
+    showWarn(`グループ定義(groups.xlsx)が読み込めませんでした (${err.message})。グループ別Excel出力は使えません。`);
   }
 }
 
@@ -405,7 +439,10 @@ function updateStats(){
   document.getElementById('sUnfilled').textContent=incomplete;
   
   const dlBtn=document.getElementById('dlBtn');
+  const zipBtn=document.getElementById('zipBtn');
   const dlMsg=document.getElementById('dlMsg');
+  
+  // CSV出力ボタン: 全件入力済みなら有効
   if(incomplete>0){
     dlBtn.disabled=true;
     const parts=[];
@@ -419,6 +456,20 @@ function updateStats(){
     dlBtn.disabled=false;
     dlMsg.textContent='全件入力済';
     dlMsg.className='msg ok';
+  }
+  
+  // ZIP出力ボタン: 全件入力済 AND 全資材コードがgroupsMapに登録済みなら有効
+  if(incomplete>0){
+    zipBtn.disabled=true;
+  }else{
+    const ungrouped=[...new Set(parsedRows.filter(r=>groupsMap[r.shizai]===undefined).map(r=>r.shizai))];
+    if(ungrouped.length>0){
+      zipBtn.disabled=true;
+      dlMsg.textContent=`グループ未登録の資材コード: ${ungrouped.join(', ')}`;
+      dlMsg.className='msg err';
+    }else{
+      zipBtn.disabled=false;
+    }
   }
   
   const badge=document.getElementById('headerBadge');
@@ -444,6 +495,60 @@ function downloadCSV(){
   a.click();
 }
 
+async function downloadGroupedZip(){
+  const today=todayYMD();
+  const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','備考','客先発注番号'];
+  
+  // (納期 × グループ名) ごとに明細をまとめる
+  // グループ名が空欄なら資材コード自身をグループ名として扱う(単独扱い)
+  const buckets={};
+  parsedRows.forEach(r=>{
+    const groupName=groupsMap[r.shizai] || r.shizai;
+    const key=`${r.noki}__${groupName}`;
+    if(!buckets[key]) buckets[key]={noki:r.noki, groupName, rows:[]};
+    buckets[key].rows.push(r);
+  });
+  
+  const zip=new JSZip();
+  const zipBtn=document.getElementById('zipBtn');
+  zipBtn.disabled=true;
+  const origText=zipBtn.textContent;
+  zipBtn.textContent='生成中...';
+  
+  try{
+    for(const key of Object.keys(buckets)){
+      const {noki, rows}=buckets[key];
+      
+      // ファイル名: 納期_注番1_注番2_...xlsx
+      const jbans=rows.map(r=>r.jban).filter(Boolean);
+      // 重複除去 + ソート
+      const uniqJbans=[...new Set(jbans)].sort();
+      const fname=`${noki}_${uniqJbans.join('_')}.xlsx`;
+      
+      // Excelシート生成
+      const aoa=[hdr];
+      rows.forEach(r=>{
+        aoa.push(['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'',r.jban]);
+      });
+      const ws=XLSX.utils.aoa_to_sheet(aoa);
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '受注データ');
+      const xlsxBuf=XLSX.write(wb, {type:'array', bookType:'xlsx'});
+      
+      zip.file(fname, xlsxBuf);
+    }
+    
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`受注データ_グループ別_${today}.zip`;
+    a.click();
+  }finally{
+    zipBtn.textContent=origText;
+    zipBtn.disabled=false;
+  }
+}
+
 const schZone=document.getElementById('schZone');
 schZone.addEventListener('click',e=>{
   if(e.target.id!=='browseBtn') document.getElementById('schFile').click();
@@ -464,6 +569,7 @@ schZone.addEventListener('drop',e=>{
 });
 
 loadPartsMaster();
+loadGroupsMaster();
 </script>
 </body>
 </html>
