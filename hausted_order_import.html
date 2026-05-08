@@ -134,7 +134,7 @@ td input.filled{border-color:var(--success);}
 <script>
 const TOKUISAKI = '000440';
 const NYUSAKI   = '004440';
-const PARTS_URL = './parts_master.xlsx';
+const PARTS_URL = './hinmei_master.xlsx';
 const GROUPS_URL = './groups.xlsx';
 const CAL_BASE  = './calendar/';
 
@@ -238,7 +238,7 @@ async function loadCalendar(year, month){
     const buf=await res.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
     calendar={};
     let count=0;
     for(let i=1;i<rows.length;i++){
