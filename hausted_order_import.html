@@ -131,7 +131,7 @@ td input.filled{border-color:var(--success);}
   </div>
   <div class="btn-row">
     <button class="btn btn-primary" id="dlBtn" onclick="downloadCSV()" disabled>↓ CSV ダウンロード</button>
-    <button class="btn btn-secondary" id="zipBtn" onclick="downloadGroupedZip()" disabled>↓ グループ別Excel(ZIP)</button>
+    <button class="btn btn-secondary" id="zipBtn" onclick="downloadGroupedZip()" disabled>↓ グループ別CSV(ZIP)</button>
     <span class="msg" id="dlMsg"></span>
   </div>
 </div>
@@ -252,7 +252,7 @@ async function loadGroupsMaster(){
     setPill('pillGroups','ok',`グループ定義 ${count}件`);
   }catch(err){
     setPill('pillGroups','warn','グループ定義 未取得');
-    showWarn(`<strong>groups.xlsx</strong> が読み込めませんでした。グループ別Excel出力は使えません。`);
+    showWarn(`<strong>groups.xlsx</strong> が読み込めませんでした。グループ別CSV出力は使えません。`);
   }
 }
 
@@ -605,18 +605,16 @@ async function downloadGroupedZip(){
       const {noki, rows}=buckets[key];
       const jbans=rows.map(r=>r.jban).filter(Boolean);
       const uniqJbans=[...new Set(jbans)].sort();
-      const fname=`${noki}_${uniqJbans.join('_')}.xlsx`;
+      const fname=`${noki}_${uniqJbans.join('_')}.csv`;
       
-      const aoa=[hdr];
+      const lines=[hdr.join(',')];
       rows.forEach(r=>{
-        aoa.push(['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'','']);
+        const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
+        lines.push(row.map(v=>`"${v}"`).join(','));
       });
-      const ws=XLSX.utils.aoa_to_sheet(aoa);
-      const wb=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '受注データ');
-      const xlsxBuf=XLSX.write(wb, {type:'array', bookType:'xlsx'});
+      const csvContent='\uFEFF'+lines.join('\r\n');
       
-      zip.file(fname, xlsxBuf);
+      zip.file(fname, csvContent);
     }
     
     const blob=await zip.generateAsync({type:'blob'});
