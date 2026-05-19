@@ -573,7 +573,7 @@ function downloadCSV(){
   const lines=[hdr.join(',')];
   parsedRows.forEach(r=>{
     const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
-    lines.push(row.map(v=>`"${v}"`).join(','));
+    lines.push(row.join(','));
   });
   const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
@@ -610,7 +610,7 @@ async function downloadGroupedZip(){
       const lines=[hdr.join(',')];
       rows.forEach(r=>{
         const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
-        lines.push(row.map(v=>`"${v}"`).join(','));
+        lines.push(row.join(','));
       });
       const csvContent='\uFEFF'+lines.join('\r\n');
       
