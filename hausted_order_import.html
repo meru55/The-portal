@@ -569,10 +569,10 @@ function updateStats(){
 
 function downloadCSV(){
   const today=todayYMD();
-  const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','備考','客先発注番号'];
+  const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','分納区分','ロケーションコード','分類コード1','分類コード2','分類コード3','分類コード4','分類コード5','部署コード','客先発注番号','客先管理番号','備考'];
   const lines=[hdr.join(',')];
   parsedRows.forEach(r=>{
-    const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'',r.jban];
+    const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
     lines.push(row.map(v=>`"${v}"`).join(','));
   });
   const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
@@ -584,7 +584,7 @@ function downloadCSV(){
 
 async function downloadGroupedZip(){
   const today=todayYMD();
-  const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','備考','客先発注番号'];
+  const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','分納区分','ロケーションコード','分類コード1','分類コード2','分類コード3','分類コード4','分類コード5','部署コード','客先発注番号','客先管理番号','備考'];
   
   const buckets={};
   parsedRows.forEach(r=>{
@@ -609,7 +609,7 @@ async function downloadGroupedZip(){
       
       const aoa=[hdr];
       rows.forEach(r=>{
-        aoa.push(['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'',r.jban]);
+        aoa.push(['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'','']);
       });
       const ws=XLSX.utils.aoa_to_sheet(aoa);
       const wb=XLSX.utils.book_new();
