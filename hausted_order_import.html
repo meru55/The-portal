@@ -156,9 +156,31 @@ function fmt8(d){
     return `${y}${m}${dd}`;
   }
   if(typeof d==='string'){
-    const m=d.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    const s=d.trim();
+    // YYYY/M/D or YYYY-M-D
+    let m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
     if(m) return `${m[1]}${m[2].padStart(2,'0')}${m[3].padStart(2,'0')}`;
-    if(/^\d{8}$/.test(d)) return d;
+    // M/D/YY or M/D/YYYY (米国式 SheetJS出力)
+    m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if(m){
+      let y=parseInt(m[3]);
+      if(y<100) y+=2000;
+      return `${y}${m[1].padStart(2,'0')}${m[2].padStart(2,'0')}`;
+    }
+    // YYYYMMDD
+    if(/^\d{8}$/.test(s)) return s;
+    // 数値文字列(Excelシリアル値)
+    if(/^\d+(\.\d+)?$/.test(s)){
+      const n=parseFloat(s);
+      if(n>20000&&n<80000){
+        const epoch=new Date(Date.UTC(1899,11,30));
+        const dt=new Date(epoch.getTime()+n*86400000);
+        return fmt8(dt);
+      }
+    }
+    // 最後の手段: Dateコンストラクタに任せる
+    const dt=new Date(s);
+    if(!isNaN(dt.getTime())) return fmt8(dt);
   }
   if(typeof d==='number'){
     const epoch=new Date(Date.UTC(1899,11,30));
@@ -244,7 +266,7 @@ async function loadCalendar(year, month){
     const buf=await res.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
     calendar={};
     let count=0;
     for(let i=1;i<rows.length;i++){
