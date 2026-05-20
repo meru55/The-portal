@@ -109,6 +109,36 @@ table.calendar .col-nm{left:180px;min-width:200px;border-right:1.5px solid var(-
 .alert{padding:10px 14px;border-radius:7px;font-size:0.72rem;margin-top:10px;display:none;line-height:1.5;}
 .alert.visible{display:block;}
 .alert-warn{background:rgba(255,71,87,0.08);border:1px solid rgba(255,71,87,0.25);color:#ff8597;}
+
+/* ファイルリスト */
+.hint-inline{font-family:'DM Mono',monospace;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:8px;font-size:0.62rem;opacity:0.7;}
+.file-list{margin-top:12px;display:flex;flex-direction:column;gap:6px;}
+.file-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:0.72rem;}
+.file-item.ok{border-color:rgba(74,222,128,0.3);}
+.file-item.err{border-color:rgba(255,71,87,0.3);background:rgba(255,71,87,0.05);}
+.file-item .fi-icon{color:var(--success);font-weight:700;}
+.file-item.err .fi-icon{color:var(--danger);}
+.file-item .fi-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.file-item .fi-meta{color:var(--muted);font-size:0.65rem;}
+.file-item .fi-region{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.62rem;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.04em;}
+.file-item .fi-region.ibaraki{background:rgba(232,255,71,0.12);color:var(--accent);border:1px solid rgba(232,255,71,0.3);}
+.file-item .fi-region.toyama{background:rgba(71,255,232,0.1);color:var(--accent2);border:1px solid rgba(71,255,232,0.3);}
+.file-item .fi-del{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:3px 9px;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.7rem;transition:all 0.15s;}
+.file-item .fi-del:hover{border-color:var(--danger);color:var(--danger);}
+
+/* 配達先フィルタ */
+.filter-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+.filter-label{font-family:'Syne',sans-serif;font-weight:700;font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;}
+.filter-group{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:3px;}
+.filter-btn{padding:5px 14px;font-family:'Syne',sans-serif;font-weight:600;font-size:0.7rem;letter-spacing:0.05em;cursor:pointer;border:none;background:transparent;color:var(--muted);border-radius:5px;transition:all 0.15s;}
+.filter-btn:hover{color:var(--text);}
+.filter-btn.active{background:var(--accent);color:var(--bg);font-weight:700;}
+
+/* 配達先バッジ(テーブル内) */
+.region-badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.6rem;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.04em;}
+.region-badge.ibaraki{background:rgba(232,255,71,0.12);color:var(--accent);border:1px solid rgba(232,255,71,0.3);}
+.region-badge.toyama{background:rgba(71,255,232,0.1);color:var(--accent2);border:1px solid rgba(71,255,232,0.3);}
+.dest-name{font-size:0.65rem;color:var(--muted);margin-left:4px;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 ::-webkit-scrollbar{width:7px;height:7px;}
@@ -144,18 +174,27 @@ table.calendar .col-nm{left:180px;min-width:200px;border-right:1.5px solid var(-
 
 <!-- 共通: 月次工程表 -->
 <div class="card" style="animation-delay:0.1s">
-  <div class="section-label">月次工程表</div>
+  <div class="section-label">月次工程表 <span class="hint-inline">最大2ファイル / 茨城・富山系の混在可</span></div>
   <div class="drop-zone" id="schZone">
     <div class="drop-title" id="schTitle">工程表をここにドロップ</div>
-    <div class="drop-hint">または <strong id="browseBtn">ファイルを選択</strong> &nbsp;<span style="opacity:0.6">(.xls / .xlsx)</span></div>
-    <input type="file" id="schFile" accept=".xlsx,.xls" style="display:none" onchange="loadSchedule(this)">
+    <div class="drop-hint">または <strong id="browseBtn">ファイルを選択</strong> &nbsp;<span style="opacity:0.6">(.xls / .xlsx / 複数選択可)</span></div>
+    <input type="file" id="schFile" accept=".xlsx,.xls" multiple style="display:none" onchange="loadSchedule(this)">
   </div>
+  <div id="fileList" class="file-list"></div>
 </div>
 
 <!-- ===== ビュー1: 出荷カレンダー作成 ===== -->
 <div class="view active" id="view-cal">
   <div class="card" id="calCard" style="display:none;animation-delay:0.15s">
     <div class="section-label">出荷カレンダー <span id="calHeaderBadge"></span></div>
+    <div class="filter-row" id="calFilterRow" style="display:none">
+      <span class="filter-label">配達先フィルタ:</span>
+      <div class="filter-group" id="calFilter">
+        <button class="filter-btn active" data-region="all">全て(合算)</button>
+        <button class="filter-btn" data-region="茨城">茨城のみ</button>
+        <button class="filter-btn" data-region="富山">富山のみ</button>
+      </div>
+    </div>
     <div class="stats-row">
       <div class="stat"><div class="stat-num" id="sItems">0</div><div class="stat-label">品目数</div></div>
       <div class="stat"><div class="stat-num" id="sDays">0</div><div class="stat-label">出荷日数</div></div>
@@ -177,6 +216,14 @@ table.calendar .col-nm{left:180px;min-width:200px;border-right:1.5px solid var(-
 <div class="view" id="view-ord">
   <div class="card" id="ordCard" style="display:none;animation-delay:0.15s">
     <div class="section-label">受注データ <span id="ordHeaderBadge"></span></div>
+    <div class="filter-row" id="ordFilterRow" style="display:none">
+      <span class="filter-label">配達先フィルタ:</span>
+      <div class="filter-group" id="ordFilter">
+        <button class="filter-btn active" data-region="all">全て</button>
+        <button class="filter-btn" data-region="茨城">茨城のみ</button>
+        <button class="filter-btn" data-region="富山">富山のみ</button>
+      </div>
+    </div>
     <div class="stats-row">
       <div class="stat"><div class="stat-num" id="oTotal">0</div><div class="stat-label">合計件数</div></div>
       <div class="stat"><div class="stat-num ok" id="oMatched">0</div><div class="stat-label">品番照合</div></div>
@@ -191,6 +238,8 @@ table.calendar .col-nm{left:180px;min-width:200px;border-right:1.5px solid var(-
             <th style="width:22px">#</th>
             <th style="width:78px">受注日</th>
             <th style="width:78px">納入日</th>
+            <th style="width:90px">配達先</th>
+            <th style="width:65px">納入先</th>
             <th style="width:110px">グループ</th>
             <th style="width:90px">資材コード</th>
             <th style="width:130px">社内品番</th>
@@ -215,7 +264,24 @@ table.calendar .col-nm{left:180px;min-width:200px;border-right:1.5px solid var(-
 <script>
 // ===== 共通定数・状態 =====
 const TOKUISAKI = '000440';
-const NYUSAKI   = '004440';
+// 納入先コード: 配達先名から自動決定
+function getNyusakiCode(destFull){
+  if(!destFull) return '004440'; // デフォルト(茨城扱い)
+  // 富山判定
+  if(destFull.includes('富山')){
+    if(destFull.includes('第１倉庫')||destFull.includes('第1倉庫')) return '001440';
+    if(destFull.includes('第８倉庫')||destFull.includes('第8倉庫')) return '003440';
+    return '002440'; // その他富山
+  }
+  // 茨城およびその他
+  return '004440';
+}
+// 配達先名 → region判定
+function getRegion(destFull){
+  if(!destFull) return '茨城';
+  return destFull.includes('富山') ? '富山' : '茨城';
+}
+
 const PARTS_URL = './hinmei_master.xlsx';
 const GROUPS_URL = './groups.xlsx';
 const CAL_BASE  = './';
@@ -224,9 +290,17 @@ const CAL_BASE  = './';
 let partsMap = {};
 let groupsMap = {};      // 資材コード -> グループ名
 let calendar = {};       // YYYYMMDD(納期) -> {noki, shukka}
-let parsedRows = [];     // {shizai, hinmeiKt, chuban, bunban, chaku, qty, jban, noki, shukka, pn, nm}
+let parsedRows = [];     // {shizai, hinmeiKt, chuban, bunban, chaku, qty, jban, noki, shukka, pn, nm, region, destFull, nyusaki, _fileId}
 let currentYear = null;
 let currentMonth = null;
+
+// アップロード済みファイル管理
+let uploadedFiles = [];  // [{id, name, region, destFulls:Set, year, month, rowCount}]
+let fileIdSeq = 0;
+
+// フィルタ状態
+let calFilterRegion = 'all';
+let ordFilterRegion = 'all';
 
 function pad2(n){return String(n).padStart(2,'0');}
 
@@ -374,49 +448,151 @@ async function loadCalendar(year, month){
 
 // ===== 工程表読込 =====
 function loadSchedule(input){
-  const file=input.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=async(e)=>{
-    try{
-      const wb=XLSX.read(e.target.result,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-      
-      let year=new Date().getFullYear(), month=new Date().getMonth()+1;
-      const info=parseHeaderMonth(data);
-      if(info){year=info.year;month=info.month;}
+  const files=Array.from(input.files||[]); if(files.length===0) return;
+  // 連続処理
+  (async()=>{
+    for(const file of files){
+      await loadOneFile(file);
+    }
+    input.value=''; // 同じファイル再選択できるように
+  })();
+}
+
+function readFileAsArrayBuffer(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>resolve(e.target.result);
+    reader.onerror=()=>reject(new Error('ファイル読込失敗'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function loadOneFile(file){
+  try{
+    const buf=await readFileAsArrayBuffer(file);
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+    
+    const info=parseHeaderMonth(data);
+    if(!info) throw new Error('年月が検出できません');
+    const {year, month}=info;
+    
+    // 年月チェック: 既存ファイルと一致するか
+    if(uploadedFiles.length>0){
+      const existing=uploadedFiles[0];
+      if(existing.year!==year || existing.month!==month){
+        throw new Error(`年月が一致しません(既存:${existing.year}年${existing.month}月 / このファイル:${year}年${month}月)`);
+      }
+    }else{
       currentYear=year;
       currentMonth=month;
-      
       await loadCalendar(year,month);
-      
-      parsedRows=extractFromSchedule(data,year,month);
-      if(parsedRows.length===0) throw new Error('明細を検出できませんでした');
-      
-      // 全行に対してマスタ照合・カレンダー照合
-      parsedRows.forEach(r=>{
-        const cal=calendar[r.chaku]||{};
-        r.noki=cal.noki||'';
-        r.shukka=cal.shukka||'';
-        const m=partsMap[r.shizai];
-        r.pn=m?m.pn:'';
-        r.nm=m?(m.nm||''):'';
-      });
-      
-      const z=document.getElementById('schZone');
-      z.classList.add('loaded');
-      document.getElementById('schTitle').innerHTML=`<span style="color:var(--success)">✓ ${file.name} (${parsedRows.length}件)</span>`;
-      
-      // 両方のビューを描画
-      document.getElementById('calCard').style.display='block';
-      document.getElementById('ordCard').style.display='block';
-      renderCalendar();
-      renderOrderTable();
-    }catch(err){
-      document.getElementById('schTitle').innerHTML=`<span style="color:var(--danger)">✗ ${err.message}</span>`;
     }
-  };
-  reader.readAsArrayBuffer(file);
+    
+    const newRows=extractFromSchedule(data,year,month);
+    if(newRows.length===0) throw new Error('明細を検出できませんでした');
+    
+    // 同じファイル名が既にあれば拒否
+    if(uploadedFiles.some(f=>f.name===file.name)){
+      throw new Error('同名ファイルは既に取り込み済み');
+    }
+    
+    // ファイルID付与・配達先集計
+    const fileId=++fileIdSeq;
+    const destFulls=new Set();
+    const regions=new Set();
+    newRows.forEach(r=>{
+      r._fileId=fileId;
+      // マスタ照合
+      const cal=calendar[r.chaku]||{};
+      r.noki=cal.noki||'';
+      r.shukka=cal.shukka||'';
+      const m=partsMap[r.shizai];
+      r.pn=m?m.pn:'';
+      r.nm=m?(m.nm||''):'';
+      if(r.destFull) destFulls.add(r.destFull);
+      if(r.region) regions.add(r.region);
+    });
+    
+    // ファイル全体としてのregion(複数あれば「混在」)
+    const region=regions.size===1?[...regions][0]:(regions.size>1?'混在':'茨城');
+    
+    uploadedFiles.push({
+      id:fileId, name:file.name, region,
+      destFulls:[...destFulls], year, month, rowCount:newRows.length
+    });
+    parsedRows.push(...newRows);
+    
+    // UI更新
+    document.getElementById('schZone').classList.add('loaded');
+    document.getElementById('schTitle').innerHTML=`<span style="color:var(--success)">✓ ${uploadedFiles.length}ファイル / ${parsedRows.length}件</span>`;
+    document.getElementById('calCard').style.display='block';
+    document.getElementById('ordCard').style.display='block';
+    renderFileList();
+    updateFilterVisibility();
+    renderCalendar();
+    renderOrderTable();
+  }catch(err){
+    // ファイルアイテムをエラー表示で追加(参考のため)
+    showFileError(file.name, err.message);
+  }
+}
+
+function showFileError(name, msg){
+  const list=document.getElementById('fileList');
+  const item=document.createElement('div');
+  item.className='file-item err';
+  item.innerHTML=`<span class="fi-icon">✗</span><span class="fi-name">${name}</span><span class="fi-meta">${msg}</span><button class="fi-del" onclick="this.parentElement.remove()">×</button>`;
+  list.appendChild(item);
+}
+
+function renderFileList(){
+  const list=document.getElementById('fileList');
+  // エラー表示は残す、ok表示だけ作り直す
+  list.querySelectorAll('.file-item.ok').forEach(el=>el.remove());
+  uploadedFiles.forEach(f=>{
+    const item=document.createElement('div');
+    item.className='file-item ok';
+    let regionBadge='';
+    if(f.region==='茨城') regionBadge=`<span class="fi-region ibaraki">茨城</span>`;
+    else if(f.region==='富山') regionBadge=`<span class="fi-region toyama">富山</span>`;
+    else regionBadge=`<span class="fi-region">${f.region}</span>`;
+    const destLabel=f.destFulls.length>0?f.destFulls.join(', '):'(配達先不明)';
+    item.innerHTML=`<span class="fi-icon">✓</span><span class="fi-name">${f.name}</span>${regionBadge}<span class="fi-meta">${destLabel} / ${f.rowCount}件</span><button class="fi-del" onclick="removeFile(${f.id})">× 削除</button>`;
+    list.appendChild(item);
+  });
+}
+
+function removeFile(fileId){
+  uploadedFiles=uploadedFiles.filter(f=>f.id!==fileId);
+  parsedRows=parsedRows.filter(r=>r._fileId!==fileId);
+  if(uploadedFiles.length===0){
+    document.getElementById('schZone').classList.remove('loaded');
+    document.getElementById('schTitle').textContent='工程表をここにドロップ';
+    document.getElementById('calCard').style.display='none';
+    document.getElementById('ordCard').style.display='none';
+  }else{
+    document.getElementById('schTitle').innerHTML=`<span style="color:var(--success)">✓ ${uploadedFiles.length}ファイル / ${parsedRows.length}件</span>`;
+  }
+  renderFileList();
+  updateFilterVisibility();
+  renderCalendar();
+  renderOrderTable();
+}
+
+// 配達先フィルタの表示制御: 2地域以上ある場合のみ表示
+function updateFilterVisibility(){
+  const regions=new Set(parsedRows.map(r=>r.region).filter(Boolean));
+  const show=regions.size>=2;
+  document.getElementById('calFilterRow').style.display=show?'flex':'none';
+  document.getElementById('ordFilterRow').style.display=show?'flex':'none';
+  if(!show){
+    calFilterRegion='all';
+    ordFilterRegion='all';
+    document.querySelectorAll('#calFilter .filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.region==='all'));
+    document.querySelectorAll('#ordFilter .filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.region==='all'));
+  }
 }
 
 function parseHeaderMonth(data){
@@ -446,9 +622,20 @@ function extractFromSchedule(data,year,month){
   const shizaiPattern=/^[0-9][A-Z0-9]{7}$|^[0-9][A-Z]\d{8}$/;
   const datePattern=/^(0?[1-9]|[12]\d|3[01])$/;
   let currentDateMap=null;
+  let currentDestFull='';  // ページごとに更新される配達先名
   
   for(let i=0;i<data.length;i++){
     const row=data[i]||[];
+    // 配達先検出: セル内に「配達先 ○○」というパターンがあれば抽出
+    for(const cell of row){
+      if(typeof cell==='string'){
+        const m=cell.match(/配達先\s*[:：]?\s*(\S+)/);
+        if(m){
+          currentDestFull=m[1].trim();
+        }
+      }
+    }
+    
     const c0=row[0]!=null?String(row[0]).trim():'';
     const c1=row[1]!=null?String(row[1]).trim():'';
     if(c0==='№'||c1==='品名'){
@@ -495,23 +682,36 @@ function extractFromSchedule(data,year,month){
       
       const chakuYMD=`${year}${pad2(month)}${day}`;
       const jban=chuban&&bs?`${chuban}-${bs}`:chuban;
+      const region=getRegion(currentDestFull);
+      const nyusaki=getNyusakiCode(currentDestFull);
       
-      rows.push({shizai:shizaiStr,hinmeiKt,chuban,bunban:bs,chaku:chakuYMD,qty:qtyNum,jban});
+      rows.push({
+        shizai:shizaiStr, hinmeiKt, chuban, bunban:bs, chaku:chakuYMD,
+        qty:qtyNum, jban,
+        destFull:currentDestFull, region, nyusaki
+      });
     }
   }
   return rows;
 }
 
 // ===== 出荷カレンダー(ビュー1) =====
+function getFilteredRows(region){
+  if(region==='all') return parsedRows;
+  return parsedRows.filter(r=>r.region===region);
+}
+
 function buildPivot(){
   const pivot={};
   const allDates=new Set();
+  const rows=getFilteredRows(calFilterRegion);
   
-  parsedRows.forEach(r=>{
+  rows.forEach(r=>{
     const key=r.shizai;
     if(!pivot[key]){
-      pivot[key]={shizai:r.shizai, pn:r.pn||'', nm:r.nm||r.hinmeiKt, byDate:{}, total:0};
+      pivot[key]={shizai:r.shizai, pn:r.pn||'', nm:r.nm||r.hinmeiKt, byDate:{}, total:0, regions:new Set()};
     }
+    if(r.region) pivot[key].regions.add(r.region);
     const d=r.shukka||r.noki||r.chaku;
     if(!d) return;
     pivot[key].byDate[d]=(pivot[key].byDate[d]||0)+r.qty;
@@ -580,7 +780,16 @@ function renderCalendar(){
     const pnDisp=it.pn||'<span style="color:var(--danger)">—</span>';
     html+=`<td class="sticky-col col-pn code">${pnDisp}</td>`;
     html+=`<td class="sticky-col col-sz code">${it.shizai}</td>`;
-    html+=`<td class="sticky-col col-nm label">${it.nm||''}</td>`;
+    // 品名 + 配達先バッジ(複数地域に跨る場合のみ)
+    let regionBadges='';
+    if(it.regions && it.regions.size>0){
+      const regs=[...it.regions];
+      regs.forEach(rg=>{
+        const cls=rg==='茨城'?'ibaraki':'toyama';
+        regionBadges+=`<span class="region-badge ${cls}" style="margin-left:6px">${rg}</span>`;
+      });
+    }
+    html+=`<td class="sticky-col col-nm label">${it.nm||''}${regionBadges}</td>`;
     dateList.forEach(d=>{
       const dt=ymdToDate(d);
       const wd=dt.getDay();
@@ -611,10 +820,11 @@ function renderCalendar(){
   
   tbl.innerHTML=html;
   
+  const filteredRows=getFilteredRows(calFilterRegion);
   document.getElementById('sItems').textContent=items.length;
-  document.getElementById('sDays').textContent=Array.from(new Set(parsedRows.map(r=>r.shukka||r.noki||r.chaku).filter(Boolean))).length;
-  document.getElementById('sRecords').textContent=parsedRows.length;
-  document.getElementById('sQty').textContent=parsedRows.reduce((a,r)=>a+r.qty,0).toLocaleString();
+  document.getElementById('sDays').textContent=Array.from(new Set(filteredRows.map(r=>r.shukka||r.noki||r.chaku).filter(Boolean))).length;
+  document.getElementById('sRecords').textContent=filteredRows.length;
+  document.getElementById('sQty').textContent=filteredRows.reduce((a,r)=>a+r.qty,0).toLocaleString();
   const missPn=items.filter(it=>!it.pn).length;
   document.getElementById('sMissPn').textContent=missPn;
   
@@ -700,31 +910,37 @@ function downloadExcel(){
   
   XLSX.utils.book_append_sheet(wb,ws,'出荷カレンダー');
   
-  // 出荷明細シート
-  const detail=[['出荷予定日','曜日','納期','着日','品番','資材コード','品名','数量','注番']];
-  const flat=parsedRows.map(r=>({
+  // 出荷明細シート(配達先・納入先列追加 / フィルタ適用)
+  const detail=[['出荷予定日','曜日','納期','着日','配達先','地域','納入先コード','品番','資材コード','品名','数量','注番']];
+  const sourceRows=getFilteredRows(calFilterRegion);
+  const flat=sourceRows.map(r=>({
     shukka:r.shukka||r.noki||r.chaku,
     noki:r.noki||r.chaku,
     chaku:r.chaku,
+    destFull:r.destFull||'',
+    region:r.region||'',
+    nyusaki:r.nyusaki||'',
     pn:r.pn||'', sz:r.shizai, nm:r.nm||r.hinmeiKt||'',
     qty:r.qty, chuban:r.chuban||''
   }));
   flat.sort((a,b)=>{
     if(a.shukka!==b.shukka) return a.shukka<b.shukka?-1:1;
+    if(a.region!==b.region) return a.region<b.region?-1:1;
     return a.pn<b.pn?-1:1;
   });
   flat.forEach(r=>{
     const dt=ymdToDate(r.shukka);
     const wd=dt?WD[dt.getDay()]:'';
     const fmt=ymd=>ymd?`${ymd.substr(0,4)}-${ymd.substr(4,2)}-${ymd.substr(6,2)}`:'';
-    detail.push([fmt(r.shukka),wd,fmt(r.noki),fmt(r.chaku),r.pn,r.sz,r.nm,r.qty,r.chuban]);
+    detail.push([fmt(r.shukka),wd,fmt(r.noki),fmt(r.chaku),r.destFull,r.region,r.nyusaki,r.pn,r.sz,r.nm,r.qty,r.chuban]);
   });
   const ws2=XLSX.utils.aoa_to_sheet(detail);
-  ws2['!cols']=[{wch:12},{wch:5},{wch:12},{wch:12},{wch:10},{wch:13},{wch:28},{wch:9},{wch:12}];
+  ws2['!cols']=[{wch:12},{wch:5},{wch:12},{wch:12},{wch:16},{wch:6},{wch:10},{wch:10},{wch:13},{wch:28},{wch:9},{wch:12}];
   ws2['!freeze']={xSplit:0,ySplit:1};
   XLSX.utils.book_append_sheet(wb,ws2,'出荷明細');
   
-  const fname=`出荷カレンダー_${currentYear}年${pad2(currentMonth)}月.xlsx`;
+  const suffix=calFilterRegion==='all'?'':'_'+calFilterRegion;
+  const fname=`出荷カレンダー${suffix}_${currentYear}年${pad2(currentMonth)}月.xlsx`;
   XLSX.writeFile(wb,fname);
 }
 
@@ -738,13 +954,21 @@ function renderOrderTable(){
     if(r._origIdx===undefined) r._origIdx=parsedRows.indexOf(r);
   });
   
-  const indexed=parsedRows.map((r,i)=>({r,i}));
-  indexed.sort((a,b)=>{
+  // フィルタ適用: 表示対象のみ
+  const filtered=parsedRows.map((r,i)=>({r,i})).filter(({r})=>{
+    return ordFilterRegion==='all'||r.region===ordFilterRegion;
+  });
+  
+  filtered.sort((a,b)=>{
     const ga=groupsMap[a.r.shizai]||'';
     const gb=groupsMap[b.r.shizai]||'';
     const na=a.r.noki||'99999999';
     const nb=b.r.noki||'99999999';
     if(na!==nb) return na<nb?-1:1;
+    // 同納期内は配達先別にまとめる
+    const ra=a.r.region||'';
+    const rb=b.r.region||'';
+    if(ra!==rb) return ra<rb?-1:1;
     if(ga!==gb){
       if(ga==='') return 1;
       if(gb==='') return -1;
@@ -753,14 +977,15 @@ function renderOrderTable(){
     return a.r.shizai<b.r.shizai?-1:1;
   });
   
+  const COLSPAN=12;
   let prevNoki='';
   let prevGroupKey='';
   let displayNum=0;
   
-  indexed.forEach(({r,i})=>{
+  filtered.forEach(({r,i})=>{
     displayNum++;
     const groupName=groupsMap[r.shizai];
-    const groupKey=`${r.noki}__${groupName||r.shizai}`;
+    const groupKey=`${r.noki}__${r.region||''}__${groupName||r.shizai}`;
     
     if(r.noki!==prevNoki){
       const sep=document.createElement('tr');
@@ -768,7 +993,7 @@ function renderOrderTable(){
       const label=r.noki
         ? `▸ 納期 ${r.noki.substr(0,4)}/${r.noki.substr(4,2)}/${r.noki.substr(6,2)}`
         : '▸ 納期 未入力';
-      sep.innerHTML=`<td colspan="10">${label}</td>`;
+      sep.innerHTML=`<td colspan="${COLSPAN}">${label}</td>`;
       tbody.appendChild(sep);
       prevNoki=r.noki;
       prevGroupKey='';
@@ -777,7 +1002,7 @@ function renderOrderTable(){
     if(prevGroupKey && groupKey!==prevGroupKey){
       const gsep=document.createElement('tr');
       gsep.className='group-sep';
-      gsep.innerHTML='<td colspan="10"></td>';
+      gsep.innerHTML=`<td colspan="${COLSPAN}"></td>`;
       tbody.appendChild(gsep);
     }
     prevGroupKey=groupKey;
@@ -794,10 +1019,18 @@ function renderOrderTable(){
       badge=`<span class="group-badge">${groupName}</span>`;
     }
     
+    // 配達先バッジ
+    let regionBadge='';
+    if(r.region==='茨城') regionBadge=`<span class="region-badge ibaraki">茨城</span><div class="dest-name">${r.destFull||''}</div>`;
+    else if(r.region==='富山') regionBadge=`<span class="region-badge toyama">富山</span><div class="dest-name">${r.destFull||''}</div>`;
+    else regionBadge=`<span class="dest-name">${r.destFull||''}</span>`;
+    
     tr.innerHTML=`
       <td>${displayNum}</td>
       <td>${today}</td>
       <td>${r.chaku}</td>
+      <td>${regionBadge}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent2)">${r.nyusaki||''}</td>
       <td>${badge}</td>
       <td>${r.shizai}</td>
       <td><input type="text" data-idx="${i}" data-field="pn" value="${r.pn}" placeholder="未照合" class="${r.pn?'filled':'unfilled'}"></td>
@@ -835,21 +1068,23 @@ function renderOrderTable(){
 }
 
 function updateOrderStats(){
-  const total=parsedRows.length;
-  const matched=parsedRows.filter(r=>r.pn).length;
-  const filled=parsedRows.filter(r=>r.noki&&r.shukka).length;
-  const incomplete=parsedRows.filter(r=>!r.pn||!r.noki||!r.shukka).length;
+  const visible=getFilteredRows(ordFilterRegion);
+  const total=visible.length;
+  const matched=visible.filter(r=>r.pn).length;
+  const filled=visible.filter(r=>r.noki&&r.shukka).length;
+  const incomplete=visible.filter(r=>!r.pn||!r.noki||!r.shukka).length;
   
   document.getElementById('oTotal').textContent=total;
   document.getElementById('oMatched').textContent=matched;
   document.getElementById('oFilled').textContent=filled;
   document.getElementById('oUnfilled').textContent=incomplete;
   
+  // 生成ファイル数: 配達先別の納入先コードごとにファイルを分ける
   const fileKeys=new Set();
-  parsedRows.forEach(r=>{
+  visible.forEach(r=>{
     if(groupsMap[r.shizai]===undefined) return;
     const groupName=groupsMap[r.shizai] || r.shizai;
-    fileKeys.add(`${r.noki}__${groupName}`);
+    fileKeys.add(`${r.region||''}__${r.noki}__${groupName}`);
   });
   document.getElementById('oFiles').textContent=fileKeys.size;
   
@@ -860,8 +1095,8 @@ function updateOrderStats(){
   if(incomplete>0){
     dlBtn.disabled=true;
     const parts=[];
-    const npn=parsedRows.filter(r=>!r.pn).length;
-    const ndt=parsedRows.filter(r=>!r.noki||!r.shukka).length;
+    const npn=visible.filter(r=>!r.pn).length;
+    const ndt=visible.filter(r=>!r.noki||!r.shukka).length;
     if(npn>0) parts.push(`品番未照合 ${npn}件`);
     if(ndt>0) parts.push(`日付未入力 ${ndt}件`);
     dlMsg.textContent=parts.join(' / ');
@@ -875,7 +1110,7 @@ function updateOrderStats(){
   if(incomplete>0){
     zipBtn.disabled=true;
   }else{
-    const ungrouped=[...new Set(parsedRows.filter(r=>groupsMap[r.shizai]===undefined).map(r=>r.shizai))];
+    const ungrouped=[...new Set(visible.filter(r=>groupsMap[r.shizai]===undefined).map(r=>r.shizai))];
     if(ungrouped.length>0){
       zipBtn.disabled=true;
       dlMsg.textContent=`グループ未登録の資材コード: ${ungrouped.join(', ')}`;
@@ -896,15 +1131,18 @@ function updateOrderStats(){
 function downloadCSV(){
   const today=todayYMD();
   const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','分納区分','ロケーションコード','分類コード1','分類コード2','分類コード3','分類コード4','分類コード5','部署コード','客先発注番号','客先管理番号','備考'];
+  const visible=getFilteredRows(ordFilterRegion);
   const lines=[hdr.join(',')];
-  parsedRows.forEach(r=>{
-    const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
+  visible.forEach(r=>{
+    const nyusaki=r.nyusaki||'004440';
+    const row=['','','','',today,TOKUISAKI,'',nyusaki,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
     lines.push(row.join(','));
   });
   const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`受注データ_${today}.csv`;
+  const suffix=ordFilterRegion==='all'?'':'_'+ordFilterRegion;
+  a.download=`受注データ${suffix}_${today}.csv`;
   a.click();
 }
 
@@ -912,46 +1150,75 @@ async function downloadGroupedZip(){
   const today=todayYMD();
   const hdr=['処理区分','受注区分','受注番号','受注枝番','受注日','得意先コード','営業担当コード','納入先コード','品番','契約数量','数量','単価','単価区分','納期','出荷予定日','分納区分','ロケーションコード','分類コード1','分類コード2','分類コード3','分類コード4','分類コード5','部署コード','客先発注番号','客先管理番号','備考'];
   
-  const buckets={};
-  parsedRows.forEach(r=>{
+  const visible=getFilteredRows(ordFilterRegion);
+  // 配達先(region)別にZIPを分離(回答5: A案)
+  const byRegion={};  // region -> {key: {noki, rows}}
+  visible.forEach(r=>{
+    const region=r.region||'unknown';
     const groupName=groupsMap[r.shizai] || r.shizai;
     const key=`${r.noki}__${groupName}`;
-    if(!buckets[key]) buckets[key]={noki:r.noki, groupName, rows:[]};
-    buckets[key].rows.push(r);
+    if(!byRegion[region]) byRegion[region]={};
+    if(!byRegion[region][key]) byRegion[region][key]={noki:r.noki, groupName, rows:[]};
+    byRegion[region][key].rows.push(r);
   });
   
-  const zip=new JSZip();
   const zipBtn=document.getElementById('zipBtn');
   zipBtn.disabled=true;
   const origText=zipBtn.textContent;
   zipBtn.textContent='生成中...';
   
   try{
-    for(const key of Object.keys(buckets)){
-      const {noki, rows}=buckets[key];
-      const jbans=rows.map(r=>r.jban).filter(Boolean);
-      const uniqJbans=[...new Set(jbans)].sort();
-      const fname=`${noki}_${uniqJbans.join('_')}.csv`;
+    // region別にZIPを順次ダウンロード
+    for(const region of Object.keys(byRegion)){
+      const buckets=byRegion[region];
+      const zip=new JSZip();
+      for(const key of Object.keys(buckets)){
+        const {noki, rows}=buckets[key];
+        const jbans=rows.map(r=>r.jban).filter(Boolean);
+        const uniqJbans=[...new Set(jbans)].sort();
+        const fname=`${noki}_${uniqJbans.join('_')}.csv`;
+        
+        const lines=[hdr.join(',')];
+        rows.forEach(r=>{
+          const nyusaki=r.nyusaki||'004440';
+          const row=['','','','',today,TOKUISAKI,'',nyusaki,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
+          lines.push(row.join(','));
+        });
+        const csvContent='\uFEFF'+lines.join('\r\n');
+        zip.file(fname, csvContent);
+      }
       
-      const lines=[hdr.join(',')];
-      rows.forEach(r=>{
-        const row=['','','','',today,TOKUISAKI,'',NYUSAKI,r.pn,'',r.qty,'','',r.noki,r.shukka,'','','','','','','','',r.jban,'',''];
-        lines.push(row.join(','));
-      });
-      const csvContent='\uFEFF'+lines.join('\r\n');
-      zip.file(fname, csvContent);
+      const blob=await zip.generateAsync({type:'blob'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=`受注データ_${region}_${today}.zip`;
+      a.click();
+      // 連続ダウンロード防止に小休止
+      await new Promise(r=>setTimeout(r,300));
     }
-    
-    const blob=await zip.generateAsync({type:'blob'});
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=`受注データ_グループ別_${today}.zip`;
-    a.click();
   }finally{
     zipBtn.textContent=origText;
     zipBtn.disabled=false;
   }
 }
+
+// ===== 配達先フィルタ =====
+document.querySelectorAll('#calFilter .filter-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#calFilter .filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    calFilterRegion=btn.dataset.region;
+    renderCalendar();
+  });
+});
+document.querySelectorAll('#ordFilter .filter-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#ordFilter .filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    ordFilterRegion=btn.dataset.region;
+    renderOrderTable();
+  });
+});
 
 // ===== タブ切替 =====
 document.querySelectorAll('.tab').forEach(tab=>{
@@ -974,11 +1241,11 @@ schZone.addEventListener('dragleave',()=>schZone.classList.remove('dragover'));
 schZone.addEventListener('drop',e=>{
   e.preventDefault();
   schZone.classList.remove('dragover');
-  const f=e.dataTransfer.files[0];
-  if(!f) return;
+  const files=Array.from(e.dataTransfer.files||[]);
+  if(files.length===0) return;
   const inp=document.getElementById('schFile');
   const dt=new DataTransfer();
-  dt.items.add(f);
+  files.forEach(f=>dt.items.add(f));
   inp.files=dt.files;
   inp.dispatchEvent(new Event('change'));
 });
