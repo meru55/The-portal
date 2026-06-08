@@ -167,12 +167,80 @@ async function loadTemplate(){
     const res=await fetch('./'+encodeURIComponent(TEMPLATE_FILE)+'?t='+Date.now());
     if(!res.ok) throw new Error('HTTP '+res.status);
     state.templateBuffer=await res.arrayBuffer();
-    setTplPill('ok',`テンプレート 読込済み（${TEMPLATE_FILE}）`);
+    buildPriceIndex(state.templateBuffer);
+    const priceNote = state.priceKeys ? `／単価表 ${state.priceKeys.length}件・得意先${state.pricePrefix}` : '／単価表なし(金額未確定)';
+    setTplPill('ok',`テンプレート 読込済み（${TEMPLATE_FILE}）${priceNote}`);
     checkReady();
   }catch(err){
     setTplPill('warn','テンプレート 未取得');
     showTplAlert(`<strong>${TEMPLATE_FILE}</strong> が読み込めませんでした。このHTMLと同じフォルダにテンプレ原本を置いてください（GitHub Pages等のhttps配信が必要です）。`);
   }
+}
+
+// ===== 単価表(データシート)とD6プレフィックスの取り込み =====
+function buildPriceIndex(buffer){
+  state.priceKeys=null; state.priceMap={}; state.pricePrefix='';
+  try{
+    const wb=XLSX.read(new Uint8Array(buffer),{type:'array'});
+    const dws=wb.Sheets['データ'];
+    if(dws){
+      const drows=XLSX.utils.sheet_to_json(dws,{header:1,defval:null});
+      const keys=[], pmap={};
+      for(let i=1;i<drows.length;i++){
+        const a=drows[i][0], p=drows[i][3]; // A=KEY, D=購入単価
+        if(a===null||a===undefined||String(a).trim()==='') continue;
+        const k=String(a).trim();
+        keys.push(k); pmap[k]=(typeof p==='number')?p:Number(p);
+      }
+      keys.sort(); // VLOOKUP近似一致のため昇順
+      state.priceKeys=keys; state.priceMap=pmap;
+    }
+    // 得意先プレフィックス: 納品書シート D6 の「：」より前
+    const nws=wb.Sheets['納品書']||wb.Sheets[wb.SheetNames[0]];
+    const d6=nws?nws['D6']:null;
+    if(d6 && typeof d6.v==='string'){
+      const idx=d6.v.indexOf('：');
+      state.pricePrefix= idx>=0 ? d6.v.slice(0,idx) : d6.v.trim();
+    }
+  }catch(err){ console.warn('単価表の取り込みに失敗',err); state.priceKeys=null; }
+}
+
+// 納入月キー: TEXT(D5,"-YYYYMM")
+function ymKey(date){ return '-'+date.getFullYear()+pad2(date.getMonth()+1); }
+
+// 1行の単価を引く（Excelの IF(COUNTIF=0,"未登録",VLOOKUP(key,…,4,1)) を再現）
+function priceFor(code, ym){
+  if(!state.priceKeys) return {ok:false};
+  const pre=state.pricePrefix+code;
+  let exists=false;
+  for(const k of state.priceKeys){ if(k.startsWith(pre)){ exists=true; break; } } // COUNTIF存在チェック
+  if(!exists) return {ok:false};
+  const target=pre+ym;
+  let lo=0,hi=state.priceKeys.length,best=-1; // 最大の key <= target
+  while(lo<hi){ const mid=(lo+hi)>>1; if(state.priceKeys[mid]<=target){ best=mid; lo=mid+1; } else hi=mid; }
+  if(best<0) return {ok:false};
+  const k=state.priceKeys[best];
+  if(!k.startsWith(pre)) return {ok:false}; // 適用開始月より前など → 別コード群を指したので未確定扱い
+  const p=state.priceMap[k];
+  if(typeof p!=='number'||isNaN(p)) return {ok:false};
+  return {ok:true, price:p};
+}
+
+// チャンク(=1納品書)の合計金額: SUM(ROUNDDOWN(数量×単価,0))
+function chunkTotal(chunk, ym){
+  let total=0, unresolved=0;
+  for(const it of chunk){
+    const r=priceFor(it.code, ym);
+    if(!r.ok){ unresolved++; continue; }
+    total += Math.floor(it.qty*r.price + 1e-6);
+  }
+  return {total, unresolved};
+}
+
+// 金額ファイル名: {yymmdd}_{合計金額}.xlsx（未確定コードがあれば明示）
+function kingakuFilename(chunk, idx, ymd, ym){
+  const {total, unresolved}=chunkTotal(chunk, ym);
+  return unresolved>0 ? `${ymd}_金額未確定_${idx+1}.xlsx` : `${ymd}_${total}.xlsx`;
 }
 
 // ===== ドロップ設定（出庫報告書のみ）=====
@@ -299,7 +367,11 @@ function renderTree(src){
   for(let i=1;i<=csvN;i++) t+=`│   <span class="csv">受注取込_旭化成住工_${today}_${i}of${csvN}.csv</span>\n`;
   t+=`└ <span class="fld">納品書/</span>\n`;
   for(let i=1;i<=nN;i++) t+=`    <span class="xls">旭化成住工納品書_1215-1-${mm}-${dd}-${i}.xlsx</span>\n`;
-  for(let i=1;i<=nN;i++) t+=`    <span class="xls">${yy}${mm}${dd}_金額_${i}.xlsx</span>\n`;
+  const ym=ymKey(d), ymd=`${yy}${mm}${dd}`;
+  for(let i=0;i<nN;i++){
+    const chunk=src.items.slice(i*NOUHIN_CHUNK,(i+1)*NOUHIN_CHUNK);
+    t+=`    <span class="xls">${kingakuFilename(chunk,i,ymd,ym)}</span>\n`;
+  }
   document.getElementById('treePreview').innerHTML=t.trimEnd();
 }
 
@@ -403,13 +475,14 @@ function buildFiles(src){
     files.push({path:`受注入力/${csvBase}_${i+1}of${csvTotal}.csv`, data:fflate.strToU8(content)});
   }
 
-  // 納品書/ : 20件ずつ 納品書xlsx ＋ 同内容の金額xlsx
+  // 納品書/ : 20件ずつ 納品書xlsx ＋ 同内容の金額xlsx（ファイル名に合計金額）
+  const ym=ymKey(d), ymd=`${yy}${mm}${dd}`;
   const chunks=[];
   for(let i=0;i<src.items.length;i+=NOUHIN_CHUNK) chunks.push(src.items.slice(i,i+NOUHIN_CHUNK));
   chunks.forEach((chunk,idx)=>{
     const bytes=buildDeliveryXlsx(state.templateBuffer,d,chunk);
     files.push({path:`納品書/旭化成住工納品書_1215-1-${mm}-${dd}-${idx+1}.xlsx`, data:bytes});
-    files.push({path:`納品書/${yy}${mm}${dd}_金額_${idx+1}.xlsx`, data:bytes});
+    files.push({path:`納品書/${kingakuFilename(chunk,idx,ymd,ym)}`, data:bytes});
   });
 
   return {files, csvTotal, nouhinTotal:chunks.length};
