@@ -359,12 +359,12 @@ function showPreview(src){
 function renderTree(src){
   const d=src.atsugiDate;
   const yy=String(d.getFullYear()).slice(2), mm=pad2(d.getMonth()+1), dd=pad2(d.getDate());
-  const today=toYMD(new Date());
+  const csvDate=toYMD(d);
   const csvN=Math.ceil(src.csvRows.length/CSV_CHUNK);
   const nN=Math.ceil(src.items.length/NOUHIN_CHUNK);
   let t=`<span class="fld">（選んだフォルダ）/</span>\n`;
   t+=`├ <span class="fld">受注入力/</span>\n`;
-  for(let i=1;i<=csvN;i++) t+=`│   <span class="csv">受注取込_旭化成住工_${today}_${i}of${csvN}.csv</span>\n`;
+  for(let i=1;i<=csvN;i++) t+=`│   <span class="csv">受注取込_旭化成住工_${csvDate}_${i}of${csvN}.csv</span>\n`;
   t+=`└ <span class="fld">納品書/</span>\n`;
   for(let i=1;i<=nN;i++) t+=`    <span class="xls">旭化成住工納品書_1215-1-${mm}-${dd}-${i}.xlsx</span>\n`;
   const ym=ymKey(d), ymd=`${yy}${mm}${dd}`;
@@ -461,11 +461,10 @@ function buildDeliveryXlsx(templateBuffer,date,chunk){
 function buildFiles(src){
   const d=src.atsugiDate;
   const yy=String(d.getFullYear()).slice(2), mm=pad2(d.getMonth()+1), dd=pad2(d.getDate());
-  const today=toYMD(new Date());
   const files=[];
 
-  // 受注入力/ : 10件ずつ分割CSV
-  const csvBase=`受注取込_旭化成住工_${today}`;
+  // 受注入力/ : 10件ずつ分割CSV（ファイル名は厚木納入日ベース）
+  const csvBase=`受注取込_旭化成住工_${toYMD(d)}`;
   const csvLines=src.csvRows.map(csvDataLine);
   const csvTotal=Math.ceil(csvLines.length/CSV_CHUNK);
   const headerLine=CSV_HEADER.join(',');
