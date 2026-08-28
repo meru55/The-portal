@@ -177,6 +177,18 @@ main{display:grid;grid-template-columns:250px 1fr;gap:0;height:calc(100vh - 63px
 .btn.export{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);box-shadow:none}
 .btn.export:hover{border-color:var(--green);color:var(--green)}
 
+/* new-file dropdown */
+.new-select{position:relative}
+.new-select.open #newBtn{background:var(--amber-deep);color:#fff}
+.new-menu{
+  position:absolute;top:calc(100% + 8px);right:0;z-index:50;min-width:220px;
+  background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;
+  box-shadow:var(--shadow-lift);padding:7px;
+  opacity:0;transform:translateY(-6px) scale(.98);pointer-events:none;transition:opacity var(--t),transform var(--t);
+}
+.new-select.open .new-menu{opacity:1;transform:none;pointer-events:auto}
+.nm-badge{font-family:"Space Grotesk";font-weight:700;font-size:10px;letter-spacing:.03em;color:#fff;border-radius:6px;padding:3px 7px;flex:none}
+
 /* ---------- File area ---------- */
 .filearea{overflow-y:auto;padding:20px 24px 60px;position:relative}
 .area-tools{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
@@ -348,6 +360,18 @@ body.file-dragging .filearea{outline:2px dashed var(--amber);outline-offset:-8px
     <div class="search">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <input type="text" id="search" placeholder="名前・タグで検索">
+    </div>
+    <div class="new-select" id="newSelect">
+      <button class="btn amber" id="newBtn" aria-haspopup="true" aria-expanded="false" title="新しいファイルを作成">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2h5l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 7v4M6 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        新規作成
+      </button>
+      <div class="new-menu" id="newMenu">
+        <div class="fm-label">新しいファイル</div>
+        <button class="fm-item" data-kind="xlsx"><span class="nm-badge ft-xlsx">XLSX</span><span class="fm-name">Excel ブック</span></button>
+        <button class="fm-item" data-kind="csv"><span class="nm-badge ft-xlsx">CSV</span><span class="fm-name">CSV ファイル</span></button>
+        <button class="fm-item" data-kind="txt"><span class="nm-badge ft-other">TXT</span><span class="fm-name">テキスト</span></button>
+      </div>
     </div>
     <button class="btn ghost" id="addFilesBtn" title="ファイルを追加">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
@@ -767,6 +791,39 @@ async function uploadFiles(files,targetKey){
   await scan();render();
   if(ok)toast(`${ok} 件を追加しました`,"good");
 }
+async function createNewFile(kind){
+  closeNewMenu();
+  const defExt={xlsx:".xlsx",csv:".csv",txt:".txt"}[kind];
+  const kindLabel={xlsx:"Excel ブック",csv:"CSV ファイル",txt:"テキスト"}[kind];
+  let name=prompt(`新しい${kindLabel}の名前`, `新規${kind==="xlsx"?"ブック":"ファイル"}${defExt}`);
+  if(!name)return;
+  name=name.trim().replace(/[\\/:*?"<>|]/g,"");
+  if(!name){toast("使えない文字が含まれています","bad");return;}
+  if(!name.toLowerCase().endsWith(defExt))name+=defExt;
+  try{
+    const dir=await dirFor(current);
+    const nm=await uniqueName(dir,name);
+    let blob;
+    if(kind==="xlsx"){
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([[]]),"Sheet1");
+      const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+      blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    }else{
+      blob=new Blob([""],{type:"text/plain"});
+    }
+    const fh=await dir.getFileHandle(nm,{create:true});
+    const w=await fh.createWritable();await w.write(blob);await w.close();
+    meta.files[pathOf(current,nm)]={tags:[],note:"",added:new Date().toISOString()};
+    await scan();render();
+    toast(`「${nm}」を作成しました`,"good");
+    const f=allFiles().find(x=>x.path===pathOf(current,nm));
+    if(f)requestAnimationFrame(()=>{const el=document.querySelector(`.card[data-path="${CSS.escape(f.path)}"]`);if(el)el.classList.add("just-moved");});
+  }catch(e){console.warn(e);toast("作成できませんでした","bad");}
+}
+function openNewMenu(){$("#newSelect").classList.add("open");$("#newBtn").setAttribute("aria-expanded","true");}
+function closeNewMenu(){const s=$("#newSelect");if(s)s.classList.remove("open");const b=$("#newBtn");if(b)b.setAttribute("aria-expanded","false");}
+function toggleNewMenu(){$("#newSelect").classList.contains("open")?closeNewMenu():openNewMenu();}
 async function moveFile(path,targetKey){
   const f=allFiles().find(x=>x.path===path);
   if(!f){return;}
@@ -1057,7 +1114,12 @@ $("#search").addEventListener("input",e=>{
 $("#sortSelect").addEventListener("change",render);
 $("#exportBtn").onclick=exportHandoff;
 $("#folderChip").onclick=(e)=>{e.stopPropagation();toggleFolderMenu();};
-document.addEventListener("click",(e)=>{if(!e.target.closest("#folderSelect"))closeFolderMenu();});
+$("#newBtn").onclick=(e)=>{e.stopPropagation();toggleNewMenu();};
+$("#newMenu").querySelectorAll(".fm-item").forEach(b=>b.onclick=()=>createNewFile(b.dataset.kind));
+document.addEventListener("click",(e)=>{
+  if(!e.target.closest("#folderSelect"))closeFolderMenu();
+  if(!e.target.closest("#newSelect"))closeNewMenu();
+});
 $("#noteArea").addEventListener("input",e=>{if(selected){if(!meta.files[selected])meta.files[selected]={tags:[],note:"",added:new Date().toISOString()};meta.files[selected].note=e.target.value;scheduleSave();}});
 $("#tagInput").addEventListener("keydown",e=>{
   if(e.key==="Enter"){const v=e.target.value.trim();if(!v||!selected)return;
@@ -1065,7 +1127,7 @@ $("#tagInput").addEventListener("keydown",e=>{
     if(!meta.files[selected].tags.includes(v))meta.files[selected].tags.push(v);
     e.target.value="";scheduleSave();renderTags();render();}
 });
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeFolderMenu();closeDrawer();}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeFolderMenu();closeNewMenu();closeDrawer();}});
 // add files button -> hidden picker via showOpenFilePicker
 $("#addFilesBtn").onclick=async()=>{
   try{
