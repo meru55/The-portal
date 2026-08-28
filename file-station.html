@@ -132,6 +132,29 @@ main{display:grid;grid-template-columns:250px 1fr;gap:0;height:calc(100vh - 63px
 .shelf-add{display:flex;align-items:center;gap:9px;padding:11px 12px;color:var(--muted);font-weight:600;font-size:13.5px;border-radius:var(--radius-sm);border:1px dashed var(--line-strong);margin-top:5px}
 .shelf-add:hover{color:var(--ink);border-color:var(--ink);background:var(--surface)}
 
+/* recent opened */
+.recent-wrap{margin-bottom:6px}
+.recent-head{display:flex;align-items:center;gap:6px;padding:2px 6px 8px;
+  font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.recent-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--radius-sm);width:100%;text-align:left;transition:background var(--t)}
+.recent-item:hover{background:var(--surface)}
+.recent-dot{width:7px;height:7px;border-radius:2px;flex:none}
+.recent-name{flex:1;font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.recent-empty{padding:4px 10px 8px;font-size:12px;color:var(--faint);line-height:1.5}
+.divider{height:1px;background:var(--line);margin:8px 4px 12px}
+
+/* favorite star on shelves */
+.shelf .star{flex:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--faint);opacity:0;transition:opacity var(--t),color var(--t),background var(--t)}
+.shelf:hover .star,.shelf .star.on{opacity:1}
+.shelf .star.on{color:var(--amber)}
+.shelf .star:hover{background:var(--surface-2)}
+.shelf.pinned .s-name::after{content:"";}
+.pin-label{font-size:10px;color:var(--amber-deep)}
+
+/* export button */
+.btn.export{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);box-shadow:none}
+.btn.export:hover{border-color:var(--green);color:var(--green)}
+
 /* ---------- File area ---------- */
 .filearea{overflow-y:auto;padding:20px 24px 60px;position:relative}
 .area-tools{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
@@ -304,11 +327,16 @@ body.file-dragging .filearea{outline:2px dashed var(--amber);outline-offset:-8px
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       追加
     </button>
+    <button class="btn export" id="exportBtn" title="タグ・メモ・棚構成を1枚のHTMLに書き出し">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      引き継ぎ
+    </button>
   </div>
 </header>
 
 <main>
   <aside class="shelves" id="shelves">
+    <div class="recent-wrap" id="recentWrap"></div>
     <div class="shelves-head"><span>棚</span></div>
     <!-- shelves injected -->
   </aside>
@@ -382,11 +410,15 @@ const META_FILE = ".filemanager.json";
 const PALETTE = ["#2F8F6B","#2F5AA8","#B98600","#8C50B0","#C4482E","#0E8FA8","#B0574F","#5a6bb0"];
 
 let rootHandle=null;
-let meta={version:1,categories:{},files:{}};   // categories:{name:{color}}, files:{path:{tags,note,added}}
+let meta={version:1,categories:{},files:{},recent:[]};   // categories:{name:{color,fav}}, files:{path:{tags,note,added}}, recent:[path]
 let model={inbox:[],categories:{}};             // categories:{name:[fileObj]}
 let current="__inbox__";                        // selected shelf key
 let selected=null;                              // selected file path
 let saveTimer=null;
+/* content search */
+let contentIndex=new Map();   // path -> lowercased sheet text (xlsx only)
+let contentMatches=new Set(); // paths matched by Excel content for current query
+let searchToken=0;            // aborts stale content searches
 
 /* ================= IndexedDB (handle persistence) ================= */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("fm-db",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
@@ -429,8 +461,8 @@ async function loadMeta(){
     const fh=await rootHandle.getFileHandle(META_FILE);
     const f=await fh.getFile();const txt=await f.text();
     const parsed=JSON.parse(txt);
-    meta={version:1,categories:parsed.categories||{},files:parsed.files||{}};
-  }catch(e){meta={version:1,categories:{},files:{}};}
+    meta={version:1,categories:parsed.categories||{},files:parsed.files||{},recent:parsed.recent||[]};
+  }catch(e){meta={version:1,categories:{},files:{},recent:[]};}
 }
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveMeta,600);}
 async function saveMeta(){
@@ -462,6 +494,10 @@ async function scan(){
   }
   // prune meta for categories that no longer exist
   for(const c of Object.keys(meta.categories))if(!(c in model.categories))delete meta.categories[c];
+  // prune recent list to existing files, invalidate content cache
+  const live=new Set(allFiles().map(f=>f.path));
+  meta.recent=(meta.recent||[]).filter(p=>live.has(p));
+  contentIndex=new Map();
   scheduleSave();
 }
 async function fileObj(handle,cat,name){
@@ -482,36 +518,72 @@ function updateProgress(){
   $("#pct").textContent=pct+"%";
   $("#rail").classList.toggle("done",pct>=100&&total>0);
 }
+const STAR='<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6L7 9.7 3.8 11.4l.6-3.6L1.8 5.3l3.6-.5L7 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+const STAR_FILL='<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6L7 9.7 3.8 11.4l.6-3.6L1.8 5.3l3.6-.5L7 1.5z"/></svg>';
+function isFav(c){return !!(meta.categories[c]&&meta.categories[c].fav);}
+function toggleFav(c){if(!meta.categories[c])return;meta.categories[c].fav=!meta.categories[c].fav;scheduleSave();render();}
+
 function renderShelves(){
   const el=$("#shelves");
-  el.querySelectorAll(".shelf,.shelf-add,.shelves-head").forEach(n=>{if(!n.classList.contains("shelves-head"))n.remove();});
-  const head=el.querySelector(".shelves-head")||(()=>{const h=document.createElement("div");h.className="shelves-head";h.innerHTML="<span>棚</span>";el.prepend(h);return h;})();
+  el.querySelectorAll(".shelf,.shelf-add").forEach(n=>n.remove());
 
   const mk=(key,label,count,color,inbox)=>{
     const b=document.createElement("button");
-    b.className="shelf"+(inbox?" inbox":"")+(current===key?" active":"");
+    b.className="shelf"+(inbox?" inbox":"")+(current===key?" active":"")+(!inbox&&isFav(key)?" pinned":"");
     b.dataset.key=key;
-    b.innerHTML=`<span class="tab" style="${color&&!inbox?`background:${color}`:""}"></span><span class="s-name"></span><span class="s-count mono">${count}</span>`;
+    const starHtml=inbox?"":`<span class="star ${isFav(key)?"on":""}" role="button" aria-label="お気に入り">${isFav(key)?STAR_FILL:STAR}</span>`;
+    b.innerHTML=`<span class="tab" style="${color&&!inbox?`background:${color}`:""}"></span><span class="s-name"></span>${starHtml}<span class="s-count mono">${count}</span>`;
     b.querySelector(".s-name").textContent=label;
     b.onclick=()=>{current=key;render();};
-    // drop target
+    const st=b.querySelector(".star");
+    if(st)st.onclick=(e)=>{e.stopPropagation();toggleFav(key);};
     b.addEventListener("dragover",e=>{if(hasInternal(e)||e.dataTransfer.types.includes("Files")){e.preventDefault();b.classList.add("drop-target");}});
     b.addEventListener("dragleave",()=>b.classList.remove("drop-target"));
     b.addEventListener("drop",e=>{e.preventDefault();b.classList.remove("drop-target");onDrop(e,key);});
     return b;
   };
   el.appendChild(mk("__inbox__","未整理",model.inbox.length,null,true));
-  Object.keys(model.categories).sort((a,b)=>a.localeCompare(b,"ja")).forEach(c=>{
-    el.appendChild(mk(c,c,model.categories[c].length,meta.categories[c]?.color));
+  const cats=Object.keys(model.categories).sort((a,b)=>{
+    const fa=isFav(a),fb=isFav(b);
+    if(fa!==fb)return fa?-1:1;               // favorites first
+    return a.localeCompare(b,"ja");
   });
+  cats.forEach(c=>el.appendChild(mk(c,c,model.categories[c].length,meta.categories[c]?.color)));
   const add=document.createElement("button");add.className="shelf-add";
   add.innerHTML='<svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 3v9M3 7.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>棚を追加';
   add.onclick=addCategory;el.appendChild(add);
+  renderRecent();
+}
+function renderRecent(){
+  const wrap=$("#recentWrap");wrap.innerHTML="";
+  const recent=(meta.recent||[]).slice(0,6);
+  const head=document.createElement("div");head.className="recent-head";
+  head.innerHTML='<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3.5V6.5L8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>最近開いた</span>';
+  wrap.appendChild(head);
+  if(!recent.length){
+    const e=document.createElement("div");e.className="recent-empty";e.textContent="開いたファイルがここに並びます。";wrap.appendChild(e);
+  }else{
+    const byPath=Object.fromEntries(allFiles().map(f=>[f.path,f]));
+    recent.forEach(p=>{
+      const f=byPath[p];if(!f)return;
+      const colors={xlsx:"#1f7a4d",pdf:"#b23b2e",img:"#5a6bb0",doc:"#2f5aa8",other:"#7c857e"};
+      const it=document.createElement("button");it.className="recent-item";
+      it.innerHTML=`<span class="recent-dot" style="background:${colors[f.type]}"></span><span class="recent-name"></span>`;
+      it.querySelector(".recent-name").textContent=f.name;
+      it.title=f.name+(f.cat!=="__inbox__"?` — ${f.cat}`:" — 未整理");
+      it.onclick=()=>openDrawer(f);
+      wrap.appendChild(it);
+    });
+  }
+  const div=document.createElement("div");div.className="divider";wrap.appendChild(div);
 }
 function currentFiles(){
   let list=current==="__inbox__"?model.inbox:(model.categories[current]||[]);
   const q=$("#search").value.trim().toLowerCase();
-  if(q)list=allFiles().filter(f=>f.name.toLowerCase().includes(q)||(meta.files[f.path]?.tags||[]).some(t=>t.toLowerCase().includes(q)));
+  if(q)list=allFiles().filter(f=>
+    f.name.toLowerCase().includes(q)||
+    (meta.files[f.path]?.tags||[]).some(t=>t.toLowerCase().includes(q))||
+    contentMatches.has(f.path));
   const sort=$("#sortSelect").value;
   list=[...list].sort((a,b)=>{
     if(sort==="name")return a.name.localeCompare(b.name,"ja");
@@ -521,6 +593,33 @@ function currentFiles(){
   });
   return list;
 }
+async function doContentSearch(raw){
+  const q=raw.trim().toLowerCase();
+  contentMatches=new Set();
+  const token=++searchToken;
+  if(q.length<2){window._searchingContent=false;render();return;}
+  const xlsxFiles=allFiles().filter(f=>f.type==="xlsx");
+  window._searchingContent=true;render();
+  for(const f of xlsxFiles){
+    if(token!==searchToken)return;            // newer search started; abort
+    let text=contentIndex.get(f.path);
+    if(text===undefined){
+      try{
+        const file=await f.handle.getFile();const buf=await file.arrayBuffer();
+        const wb=ext(f.name)==="csv"
+          ? XLSX.read(new TextDecoder().decode(new Uint8Array(buf)),{type:"string"})
+          : XLSX.read(buf,{type:"array"});
+        let acc=wb.SheetNames.join(" ")+" ";
+        wb.SheetNames.forEach(n=>{acc+=XLSX.utils.sheet_to_csv(wb.Sheets[n])+" ";});
+        text=acc.toLowerCase().slice(0,200000);   // cap huge sheets
+      }catch(e){text="";}
+      contentIndex.set(f.path,text);
+    }
+    if(text.includes(q)){contentMatches.add(f.path);render();}
+  }
+  if(token===searchToken){window._searchingContent=false;render();}
+}
+
 function render(){
   renderShelves();updateProgress();
   const searching=$("#search").value.trim();
@@ -528,7 +627,10 @@ function render(){
   $("#areaTitle").textContent=searching?`「${searching}」の検索結果`:(isInbox?"未整理":current);
   $("#areaDot").style.background=searching?"#9AA49D":(isInbox?"#E0A400":(meta.categories[current]?.color||"#9AA49D"));
   const files=currentFiles();
-  $("#areaSub").textContent=`${files.length} 件`+(isInbox&&!searching&&files.length?" · ドラッグで棚に振り分け":"");
+  let sub=`${files.length} 件`;
+  if(searching){sub+=window._searchingContent?" · Excelの中身も検索中…":" · 名前・タグ・Excel中身から検索";}
+  else if(isInbox&&files.length){sub+=" · ドラッグで棚に振り分け";}
+  $("#areaSub").textContent=sub;
 
   const c=$("#fileContainer");c.innerHTML="";
   if(files.length===0){
@@ -670,6 +772,9 @@ async function addCategory(){
 /* ================= Drawer ================= */
 async function openDrawer(f){
   selected=f.path;
+  // record as recently opened (front, dedup, cap 12)
+  meta.recent=[f.path,...(meta.recent||[]).filter(p=>p!==f.path)].slice(0,12);
+  scheduleSave();renderRecent();
   $("#dtName").textContent=f.name;
   $("#dtMeta").textContent=`${typeLabel(f.name)} · ${fmtSize(f.size)} · 追加 ${fmtDate(f.added)}`;
   const tcls={xlsx:"ft-xlsx",pdf:"ft-pdf",img:"ft-img",doc:"ft-doc",other:"ft-other"}[f.type];
@@ -776,6 +881,59 @@ async function deleteFile(){
   }catch(e){toast("削除できませんでした","bad");}
 }
 
+/* ================= Handoff index export ================= */
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function exportHandoff(){
+  const total=allFiles().length,sorted=Object.values(model.categories).flat().length;
+  const pct=total===0?0:Math.round(sorted/total*100);
+  const now=new Date();const stamp=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  const section=(title,color,files)=>{
+    if(!files.length)return `<h2 style="border-left:5px solid ${color}"><span>${esc(title)}</span><span class="cnt">${files.length}</span></h2><p class="empty">（ファイルなし）</p>`;
+    const rows=files.sort((a,b)=>a.name.localeCompare(b.name,"ja")).map(f=>{
+      const m=meta.files[f.path]||{};
+      const tags=(m.tags||[]).map(t=>`<span class="tg">${esc(t)}</span>`).join(" ");
+      const note=m.note?`<div class="note">${esc(m.note)}</div>`:"";
+      return `<tr><td class="fn">${esc(f.name)}<div class="ty">${esc(typeLabel(f.name))} · ${fmtSize(f.size)}</div></td><td>${tags||'<span class="dim">—</span>'}${note}</td></tr>`;
+    }).join("");
+    return `<h2 style="border-left:5px solid ${color}"><span>${esc(title)}</span><span class="cnt">${files.length}</span></h2>
+      <table><thead><tr><th style="width:44%">ファイル</th><th>タグ / メモ</th></tr></thead><tbody>${rows}</tbody></table>`;
+  };
+  let body=section("未整理",'#E0A400',model.inbox);
+  Object.keys(model.categories).sort((a,b)=>a.localeCompare(b,"ja")).forEach(c=>{
+    body+=section(c+(isFav(c)?" ★":""),meta.categories[c]?.color||"#7c857e",model.categories[c]);
+  });
+  const html=`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>引き継ぎインデックス — ${esc(rootHandle.name)}</title>
+<style>
+body{font-family:"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;color:#1E2622;max-width:820px;margin:0 auto;padding:40px 28px;line-height:1.6;background:#fff}
+.head{border-bottom:2px solid #1E2622;padding-bottom:18px;margin-bottom:26px}
+.head h1{font-size:22px;margin:0 0 8px}
+.meta{color:#6C7770;font-size:13px}
+.bar{height:10px;background:#EBEEE8;border-radius:99px;overflow:hidden;margin-top:14px;max-width:320px}
+.bar>span{display:block;height:100%;background:linear-gradient(90deg,#37a37c,#2F8F6B);width:${pct}%}
+h2{font-size:16px;margin:30px 0 12px;padding:6px 0 6px 14px;display:flex;align-items:center;gap:10px}
+h2 .cnt{font-size:12px;color:#6C7770;font-weight:500;background:#F5F7F2;border-radius:99px;padding:1px 10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;color:#6C7770;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-bottom:1px solid #D6DBD3}
+td{padding:9px 10px;border-bottom:1px solid #EDF0EA;vertical-align:top}
+.fn{font-weight:600}.ty{font-size:11px;color:#9AA49D;font-weight:400;margin-top:2px}
+.tg{display:inline-block;background:#E4F1EB;color:#2F8F6B;border:1px solid #bfe0d0;border-radius:99px;padding:1px 9px;font-size:11.5px;font-weight:600;margin:1px 0}
+.note{margin-top:6px;color:#3d463f;font-size:12.5px;background:#F5F7F2;border-left:3px solid #C3C9BF;padding:5px 9px;border-radius:4px}
+.dim{color:#C3C9BF}.empty{color:#9AA49D;font-size:13px;margin:4px 0 0 14px}
+@media print{body{padding:0}}
+</style></head><body>
+<div class="head"><h1>引き継ぎインデックス</h1>
+<div class="meta">フォルダ：${esc(rootHandle.name)}　／　作成：${stamp}　／　全 ${total} 件・整理完了率 ${pct}%</div>
+<div class="bar"><span></span></div></div>
+${body}
+<p style="margin-top:36px;color:#9AA49D;font-size:12px">整理ステーションで書き出し</p>
+</body></html>`;
+  const blob=new Blob([html],{type:"text/html"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`引き継ぎインデックス_${rootHandle.name}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}.html`;
+  a.click();URL.revokeObjectURL(a.href);
+  toast("引き継ぎインデックスを書き出しました","good");
+}
+
 /* ================= Connect flow ================= */
 async function connect(pick){
   try{
@@ -787,6 +945,9 @@ async function connect(pick){
     $("#gate").style.display="none";$("#app").style.display="block";
     current="__inbox__";render();
     toast(`「${rootHandle.name}」に接続しました`,"good");
+    // reopen last opened file, if it still exists
+    const last=(meta.recent||[])[0];
+    if(last){const f=allFiles().find(x=>x.path===last);if(f){current=f.cat;render();setTimeout(()=>openDrawer(f),260);}}
   }catch(e){if(e.name!=="AbortError")toast("接続できませんでした","bad");}
 }
 
@@ -798,9 +959,18 @@ async function connect(pick){
   const saved=await kvGet("rootHandle").catch(()=>null);
   if(saved){
     rootHandle=saved;
+    // if the browser still remembers permission, reconnect automatically
+    let granted=false;
+    try{granted=(await saved.queryPermission({mode:"readwrite"}))==="granted";}catch(e){}
+    if(granted){connect(false);return;}
+    // otherwise offer a prominent one-tap reconnect
     const rb=$("#reconnectBtn");rb.style.display="inline-flex";
-    rb.textContent=`「${saved.name}」を再接続`;
+    rb.className="btn amber";
+    rb.innerHTML=`<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 9a6 6 0 0110-4.5M15 9a6 6 0 01-10 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13 3v2.5h-2.5M5 15v-2.5h2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>「${saved.name}」を開く`;
     rb.onclick=()=>connect(false);
+    // demote the "choose folder" button to a secondary action
+    $("#connectBtn").className="btn ghost";
+    $("#connectBtn").innerHTML='別のフォルダを選ぶ';
   }
   $("#connectBtn").onclick=()=>connect(true);
 })();
@@ -810,8 +980,15 @@ $("#drawerClose").onclick=closeDrawer;
 $("#scrim").onclick=closeDrawer;
 $("#renameBtn").onclick=renameFile;
 $("#deleteBtn").onclick=deleteFile;
-$("#search").addEventListener("input",render);
+let searchDebounce=null;
+$("#search").addEventListener("input",e=>{
+  render();
+  clearTimeout(searchDebounce);
+  const v=e.target.value;
+  searchDebounce=setTimeout(()=>doContentSearch(v),260);
+});
 $("#sortSelect").addEventListener("change",render);
+$("#exportBtn").onclick=exportHandoff;
 $("#folderChip").onclick=()=>connect(true);
 $("#noteArea").addEventListener("input",e=>{if(selected){if(!meta.files[selected])meta.files[selected]={tags:[],note:"",added:new Date().toISOString()};meta.files[selected].note=e.target.value;scheduleSave();}});
 $("#tagInput").addEventListener("keydown",e=>{
